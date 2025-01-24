@@ -13,6 +13,10 @@ Amelia Nur Vidyanti,1 Muhammad Hardhantyo,2,3 ,† Herdiantri Sufriyana,4,5 Emil
 † Corresponding author:
 Muhammad Hardhantyo. Address: Center for Health Policy and Management, Faculty of Medicine, Universitas Gadjah Mada, Yogyakarta 55281, Indonesia. Email address: hardhantyo@gmail.com.
 
+# Overview
+
+Follow instruction below to install the programming environment. Find the source codes in index.Rmd. The simplified output of the source codes is shown  [**here**](https://herdiantrisufriyana.github.io/colab_pcci/index.html).
+
 ## System requirements
 
 Install Docker desktop once in your machine. Start the service every time you build this project image or run the container.
