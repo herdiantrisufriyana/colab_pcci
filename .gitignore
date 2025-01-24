@@ -52,4 +52,10 @@ rsconnect/
 *.Rproj
 
 # Ignore everything in archive
-archive/*
+archive*
+
+# Ignore raw data
+inst/extdata/raw_data/
+
+# Ignore local file
+.DS_Store
