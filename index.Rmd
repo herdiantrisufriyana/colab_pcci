@@ -1,0 +1,4526 @@
+---
+title: "Post-COVID Cognitive Impairment among Patients in a Hospital in D.I. Yogyakarta, Indonesia, November 2021 to December 2023"
+author: "Amelia Nur Vidyanti, Muhammad Hardhantyo, Herdiantri Sufriyana, Emily Chia-Yu Su,  Hanevi Djasri, Astuti Prodjohardjono, Rifki Habibi Rahman, Bao-Ping Zhu, Rebecca D. Merrill,  Catharina Yekti Praptiningsih, Amalya Mangiri"
+date: "2023-01-01"
+output: html_document
+---
+
+# Programming environment
+
+```{r Determine settings, include=FALSE}
+seed <- 2023-01-01
+```
+
+```{r Load packages, include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(knitr)
+library(kableExtra)
+library(survival)
+library(survminer)
+library(mice)
+filter=dplyr::filter
+cbind=base::cbind
+rbind=base::rbind
+library(broom)
+library(igraph)
+library(ggnetwork)
+library(pbapply)
+```
+
+```{r Load custom functions, include=FALSE}
+lapply(list.files("R/", pattern = "-function.R", full.names = TRUE), source)
+```
+
+```{r Set theme, include=FALSE}
+dslabs::ds_theme_set()
+```
+
+# Load raw data
+
+```{r Read data batch 1 & 2, include=FALSE}
+data_batch1_2_raw <-
+  readxl::read_xlsx("inst/extdata/raw_data/data_batch1_2.xlsx") |>
+  left_join(
+    readxl::read_xlsx("inst/extdata/raw_data/data_batch1_2_moca_ina.xlsx")
+    , by = join_by(id)
+  ) |>
+  left_join(
+    readxl::read_xlsx("inst/extdata/raw_data/data_batch1_2_interviewer.xlsx")
+    , by = join_by(id)
+  ) |>
+  rename_all(str_remove_all, "\\r")
+```
+
+# Data preprocessing
+
+```{r Old colnames of data batch 1 & 2, include=FALSE}
+data_batch1_2_old_colnames <-
+  data.frame(old_colname = colnames(data_batch1_2_raw))
+```
+
+```{r Write old colnames of data batch 1 & 2, eval=FALSE, include=FALSE}
+data_batch1_2_old_colnames |>
+  write_csv("inst/extdata/data_batch1_2_old_colnames.csv")
+```
+
+```{r Read new colnames of data batch 1 & 2, include=FALSE}
+data_batch1_2_new_colnames <-
+  read_csv(
+    "inst/extdata/data_batch1_2_new_colnames.csv", show_col_types = FALSE
+  )
+```
+
+```{r Change colnames of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw2 <-
+  data_batch1_2_raw |>
+  mutate_all(as.character)
+
+data_batch1_2_raw2 <-
+  data_batch1_2_raw2 |>
+  mutate(seq = seq(nrow(data_batch1_2_raw2))) |>
+  gather(old_colname, value, -seq) |>
+  left_join(data_batch1_2_new_colnames, by = join_by(old_colname)) |>
+  select(-old_colname) |>
+  mutate(new_colname = factor(new_colname, unique(new_colname))) |>
+  spread(new_colname, value) |>
+  arrange(seq) |>
+  select(-seq)
+
+data_batch1_2_raw2 <-
+  data_batch1_2_raw2[
+    , sapply(data_batch1_2_raw2, \(x) length(unique(x[!is.na(x)])) > 1)
+  ]
+```
+
+```{r Unify female and male reproductive score, include=FALSE}
+data_batch1_2_raw3_colnames <-
+  c(colnames(data_batch1_2_raw2)[
+      seq(1, which(colnames(data_batch1_2_raw2) == "male_repro_score"))
+    ]
+    , "repro_score"
+    , colnames(data_batch1_2_raw2)[
+        seq(
+          which(colnames(data_batch1_2_raw2) == "male_repro_score") + 1
+          , length(colnames(data_batch1_2_raw2))
+        )
+      ]
+    )
+
+data_batch1_2_raw3 <-
+  data_batch1_2_raw2 |>
+  mutate_at(
+    c("female_repro_score", "male_repro_score")
+    ,\(x) ifelse(str_detect(x, "[:digit:]+"), x, NA)
+  ) |>
+  mutate(
+    repro_score =
+      ifelse(sex == "Perempuan", female_repro_score, male_repro_score)
+  ) |>
+  select_at(data_batch1_2_raw3_colnames) |>
+  select(-female_repro_score,-male_repro_score)
+```
+
+```{r Determine non-categorical columns, include=FALSE}
+non_cat_cols <-
+  colnames(data_batch1_2_raw3)[
+    str_detect(colnames(data_batch1_2_raw3),"_score$|^moca_ina_")
+  ]
+
+non_cat_cols <- non_cat_cols[ non_cat_cols != "moca_ina_class"]
+
+non_cat_cols <-
+  c("id"
+    , "timestamp"
+    , "birth_date"
+    , "prev_inf"
+    , "inf_date"
+    , "medical_history"
+    , "symptom"
+    , "los"
+    , "cig_smoking_d"
+    , "vaccine_dosage"
+    , "weight"
+    , "height"
+  ) |>
+  c(non_cat_cols)
+```
+
+```{r Old values of cat. of data batch 1 & 2, include=FALSE}
+data_batch1_2_old_values <-
+  data_batch1_2_raw3 |>
+  select_if(!colnames(data_batch1_2_raw3) %in% non_cat_cols) |>
+  gather(colname, value) |>
+  select(-colname) |>
+  unique() |>
+  rename(old_value = value)
+```
+
+
+```{r Write old values of cat. of data batch 1 & 2, eval=FALSE, include=FALSE}
+write_csv(data_batch1_2_old_values, "inst/extdata/data_batch1_2_old_values.csv")
+```
+
+```{r Read new values of cat. of data batch 1 & 2, include=FALSE}
+data_batch1_2_new_values <-
+  read_csv("inst/extdata/data_batch1_2_new_values.csv", show_col_types = FALSE)
+```
+
+```{r Change values of cat. of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw4 <-
+  data_batch1_2_raw3 |>
+  select_if(!colnames(data_batch1_2_raw3) %in% non_cat_cols)
+
+data_batch1_2_raw4 <-
+  data_batch1_2_raw4 |>
+  mutate(seq = seq(nrow(data_batch1_2_raw4))) |>
+  gather(colname, old_value, -seq) |>
+  left_join(data_batch1_2_new_values, by = join_by(old_value)) |>
+  select(-old_value) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname, new_value) |>
+  arrange(seq) |>
+  select(-seq) |>
+  cbind(
+    data_batch1_2_raw3 |>
+      select_if(colnames(data_batch1_2_raw3) %in% non_cat_cols)
+  ) |>
+  select_at(colnames(data_batch1_2_raw3))
+
+data_batch1_2_raw4 <-
+  data_batch1_2_raw4[
+    , sapply(data_batch1_2_raw4, \(x) length(unique(x[!is.na(x)])) > 1)
+  ]
+```
+
+```{r Determine cat. female-depend. columns, include=FALSE}
+cat_female_cols <-
+  c("unusual_menstruation"
+    , "premenstrual_syndrome"
+    , "menstrual_blood_clot"
+    , "dry_vagina"
+    , "vaginal_discharge"
+    , "female_orgasm"
+    , "female_sex_interest"
+  )
+```
+
+```{r Determine cat. male-depend. columns, include=FALSE}
+cat_male_cols <-
+  c("erection"
+    , "ejaculation"
+    , "male_sex_interest"
+  )
+```
+
+```{r Change values of cat. F/M-dep. columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw4_female <-
+  data_batch1_2_raw4 |>
+  mutate(seq = seq(nrow(data_batch1_2_raw4))) |>
+  filter(sex=="Female")
+
+data_batch1_2_raw4_male <-
+  data_batch1_2_raw4 |>
+  mutate(seq = seq(nrow(data_batch1_2_raw4))) |>
+  filter(sex=="Male")
+
+data_batch1_2_raw5 <-
+  data_batch1_2_raw4_female |>
+  select_at(cat_male_cols) |>
+  mutate_all(\(x) NA) |>
+  cbind(
+    data_batch1_2_raw4_female |>
+      select_if(!colnames(data_batch1_2_raw4_female) %in%cat_male_cols)
+  ) |>
+  select_at(c("seq", colnames(data_batch1_2_raw4))) |>
+  rbind(
+    data_batch1_2_raw4_male |>
+      select_at(cat_female_cols) |>
+      mutate_all(\(x) NA) |>
+      cbind(
+        data_batch1_2_raw4_male |>
+          select_if(!colnames(data_batch1_2_raw4_male) %in%cat_female_cols)
+      ) |>
+      select_at(c("seq", colnames(data_batch1_2_raw4)))
+  ) |>
+  arrange(seq) |>
+  select(-seq)
+```
+
+```{r Determine non-categorical text columns, include=FALSE}
+non_cat_txt_cols <-
+  c("medical_history"
+    , "symptom"
+  )
+```
+
+```{r Gather and preprocess non-categorical text columns, include=FALSE}
+txt_cols_gather <-
+  data_batch1_2_raw5 |>
+  select_at(non_cat_txt_cols) |>
+  mutate(seq = seq(nrow(data_batch1_2_raw5))) |>
+  gather(colname, old_txt, -seq) |>
+  mutate(old_txt = str_replace_all(old_txt, "\\s*,\\s*", ",")) |>
+  separate_rows(old_txt, sep = ",") |>
+  mutate(
+    old_txt =
+      str_to_lower(old_txt) |>
+      str_replace_all("\\s+", " ") |>
+      trimws() |>
+      str_replace_all(" / ", "/")
+  ) |>
+  mutate(
+    old_txt =
+      ifelse(old_txt == "lainnya", paste0(colname, "|", old_txt), old_txt)
+  )
+```
+
+```{r Old values non-cat. txt data batch 1 & 2, include=FALSE}
+data_batch1_2_old_txts <-
+  txt_cols_gather |>
+  select(old_txt) |>
+  unique()
+```
+
+```{r Write old values non-cat. txt data batch 1 & 2, eval=FALSE, include=FALSE}
+write_csv(data_batch1_2_old_txts, "inst/extdata/data_batch1_2_old_txts.csv")
+```
+
+```{r Read new values non-cat. txt data batch 1 & 2, include=FALSE}
+data_batch1_2_new_txts <-
+  read_csv("inst/extdata/data_batch1_2_new_txts.csv", show_col_types = FALSE)
+```
+
+```{r Change values of non-cat. text columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw6 <-
+  data_batch1_2_raw5 |>
+  imap(~ data_batch1_2_raw5_txt_to_cat(.y)) |>
+  reduce(cbind)
+```
+
+```{r Determine cat. num. from text columns, include=FALSE}
+cat_num_txt_cols <-
+   data_batch1_2_new_txts$new_txt[!is.na(data_batch1_2_new_txts$new_txt)]
+```
+
+```{r Determine non-categorical date columns, include=FALSE}
+non_cat_date_cols <-
+  c("timestamp"
+    , "birth_date"
+    , "inf_date"
+  )
+```
+
+```{r Change values of non-cat. date columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw7 <-
+  data_batch1_2_raw6 |>
+  select_at(non_cat_date_cols) |>
+  mutate_at("timestamp", as_datetime)
+
+data_batch1_2_raw7 <-
+  data_batch1_2_raw7 |>
+  mutate_if(!colnames(data_batch1_2_raw7) %in% c("timestamp"), as_date) |>
+  cbind(
+    data_batch1_2_raw6 |>
+      select_if(!colnames(data_batch1_2_raw6) %in% non_cat_date_cols)
+  ) |>
+  select_at(colnames(data_batch1_2_raw6))
+```
+
+```{r Determine non-categorical num. columns, include=FALSE}
+non_cat_num_cols <-
+  non_cat_cols[!non_cat_cols %in% c(non_cat_txt_cols, non_cat_date_cols)]
+```
+
+```{r Gather and preprocess non-categorical num. columns, include=FALSE}
+num_cols_gather <-
+  data_batch1_2_raw7 |>
+  select_at(non_cat_num_cols) |>
+  mutate(seq = seq(nrow(data_batch1_2_raw7))) |>
+  gather(colname, old_num, -seq) |>
+  mutate(old_num = str_replace_all(old_num, "\\s*/\\s*", "/")) |>
+  mutate(
+    old_num =
+      str_to_lower(old_num) |>
+      str_replace_all("\\s+", " ") |>
+      trimws()
+  ) |>
+  mutate(
+    old_num =
+      str_replace_all(old_num, "1 kali, 2 kali","3 kali") |>
+      str_remove_all(
+        c("\\s*kali"
+          ,"\\s*x"
+          ,",kali"
+          ,"\\s*hari"
+          ,"/.*"
+          ,"\\s*bari"
+          ,"\\s*tahun lebih"
+          ,"\\s*tahun"
+          ,"\\s*kg"
+          ,"\\s*cm"
+          ) |>
+          paste0(collapse = "|")
+      )
+  )
+```
+
+```{r Old values non-cat. num data batch 1 & 2, include=FALSE}
+data_batch1_2_old_nums <-
+  num_cols_gather |>
+  filter(str_detect(old_num, "[^[:digit:]]")) |>
+  select(old_num) |>
+  unique()
+```
+
+```{r Write old values non-cat. num data batch 1 & 2, eval=FALSE, include=FALSE}
+write_csv(data_batch1_2_old_nums, "inst/extdata/data_batch1_2_old_nums.csv")
+```
+
+```{r Read new values non-cat. num data batch 1 & 2, include=FALSE}
+data_batch1_2_new_nums <-
+  read_csv("inst/extdata/data_batch1_2_new_nums.csv", show_col_types = FALSE)
+```
+
+```{r Change values of non-cat. num. columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw8 <-
+  num_cols_gather |>
+  filter(str_detect(old_num, "[^[:digit:]]")) |>
+  left_join(data_batch1_2_new_nums, by = join_by(old_num)) |>
+  rbind(
+    num_cols_gather |>
+      filter(!str_detect(old_num, "[^[:digit:]]")) |>
+      mutate(new_num = old_num)
+  ) |>
+  select(-old_num) |>
+  mutate_at("new_num", as.numeric) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname,new_num) |>
+  arrange(seq) |>
+  select(-seq) |>
+  cbind(
+    data_batch1_2_raw7 |>
+      select_if(!colnames(data_batch1_2_raw7) %in% non_cat_num_cols)
+  ) |>
+  select_at(colnames(data_batch1_2_raw7))
+```
+
+```{r Gather cat. non-num. columns, include=FALSE}
+cat_non_num_cols_gather <-
+  data_batch1_2_raw8[, sapply(data_batch1_2_raw8, is.character)] |>
+  gather(colname, old_cat) |>
+  unique() |>
+  filter(!is.na(old_cat))
+
+cat_non_num_cols_gather <-
+  cat_non_num_cols_gather |>
+  filter(
+    colname
+    %in% pull(
+      filter(cat_non_num_cols_gather, str_detect(old_cat, "[^[:digit:]]"))
+      , colname
+    )
+  ) |>
+  arrange(factor(colname, unique(colname)), old_cat)
+```
+
+```{r Determine cat. non-num. columns, include=FALSE}
+cat_non_num_cols <- unique(cat_non_num_cols_gather$colname)
+```
+
+```{r Old values cat. non-num data batch 1 & 2, include=FALSE}
+data_batch1_2_old_cats <- cat_non_num_cols_gather
+```
+
+```{r Write old values cat. non-num data batch 1 & 2, eval=FALSE, include=FALSE}
+write_csv(data_batch1_2_old_cats, "inst/extdata/data_batch1_2_old_cats.csv")
+```
+
+```{r Read new values cat. non-num data batch 1 & 2, include=FALSE}
+data_batch1_2_new_cats <-
+  read_csv("inst/extdata/data_batch1_2_new_cats.csv", show_col_types = FALSE)
+```
+
+```{r Change levels of cat. non-num. columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw9 <-
+  data_batch1_2_raw8 |>
+  select_at(cat_non_num_cols) |>
+  mutate(seq = seq(nrow(data_batch1_2_raw8))) |>
+  gather(colname, old_cat, -seq) |>
+  left_join(data_batch1_2_new_cats, by = join_by(colname, old_cat)) |>
+  select(-old_cat) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname,new_cat) |>
+  arrange(seq) |>
+  select(-seq) |>
+  mutate_all(
+    \(x)
+    str_remove_all(x, "[:digit:]+-") |>
+      factor(str_remove_all(sort(unique(x)), "[:digit:]+-"))
+  ) |>
+  cbind(
+    data_batch1_2_raw8 |>
+      select_if(!colnames(data_batch1_2_raw8) %in% cat_non_num_cols)
+  ) |>
+  select_at(colnames(data_batch1_2_raw8))
+```
+
+```{r Change levels of cat. num. columns of data batch 1 & 2, include=FALSE}
+data_batch1_2_raw10 <-
+  data_batch1_2_raw9 |>
+  select_if(
+    !colnames(data_batch1_2_raw9)
+     %in% c(cat_non_num_cols, non_cat_date_cols, non_cat_num_cols)
+  ) |>
+  mutate_all(\(x) factor(x, sort(unique(x))[!is.na(sort(unique(x)))])) |>
+  cbind(
+    data_batch1_2_raw9 |>
+      select_if(
+        colnames(data_batch1_2_raw9)
+        %in% c(cat_non_num_cols, non_cat_date_cols, non_cat_num_cols)
+      )
+  ) |>
+  select_at(colnames(data_batch1_2_raw9))
+```
+
+```{r Compute age at timestamp and inf_date, include=FALSE}
+data_batch1_2_raw11 <-
+  data_batch1_2_raw10 |>
+  mutate(
+    age_timestamp = as.duration(as_date(timestamp) - birth_date) / dyears(1)
+    , age_inf_date = as.duration(inf_date - birth_date) / dyears(1)
+  ) |>
+  select(-timestamp, -birth_date, -inf_date) |>
+  select(id, regency, area,age_timestamp, age_inf_date, everything())
+```
+
+```{r Determine non-cat. num. from date columns, include=FALSE}
+non_cat_num_date_cols <-
+  c("age_timestamp"
+    , "age_inf_date"
+  )
+```
+
+```{r Old colorder of data batch 1 & 2, include=FALSE}
+data_batch1_2_old_colorder <-
+  data.frame(col = colnames(data_batch1_2_raw11)) |>
+  mutate(old_order = seq(n()))
+```
+
+```{r Write old colorder of data batch 1 & 2, eval=FALSE, include=FALSE}
+data_batch1_2_old_colorder |>
+  write_csv("inst/extdata/data_batch1_2_old_colorder.csv")
+```
+
+```{r Read new colorder of data batch 1 & 2, include=FALSE}
+data_batch1_2_new_colorder <-
+  read_csv(
+    "inst/extdata/data_batch1_2_new_colorder.csv", show_col_types = FALSE
+  )
+```
+
+```{r Arrange samples by timestamp & columns as it was proposed, include=FALSE}
+data_batch1_2_raw12 <-
+  data_batch1_2_raw11 |>
+  left_join(select(data_batch1_2_raw10, id, timestamp), by = join_by(id)) |>
+  arrange(timestamp) |>
+  select(-timestamp) |>
+  select_at(data_batch1_2_new_colorder$col)
+```
+
+```{r Read SBQ-LC maximum scores, include=FALSE}
+data_batch1_2_sbq_lc_max_scores <-
+  read_csv(
+    "inst/extdata/data_batch1_2_sbq_lc_max_scores.csv"
+    , show_col_types = FALSE
+  )
+```
+
+```{r Define batch and exposure and normalize SBQ-LC scores, include=FALSE}
+data_batch1_2_raw13 <-
+  data_batch1_2_raw12 |>
+  mutate(
+    batch = factor(ifelse(seq(n()) <= 90, "Batch 1", "Batch 2"))
+    ,interview_onset = age_timestamp - age_inf_date
+    ,exposure = factor(ifelse(severity == "Mild" & interview_onset >1, 0, 1))
+  )
+
+data_batch1_2_raw13 <-
+  cbind(
+    data_batch1_2_raw13[, !str_detect(colnames(data_batch1_2_raw13), "_score")]
+    , data_batch1_2_raw13[
+        , str_detect(colnames(data_batch1_2_raw13), "^sex|_score")
+      ] |>
+      mutate(seq = seq(nrow(data_batch1_2_raw13))) |>
+      gather(sbq_lc_scale, raw_score, -seq, -sex) |>
+      mutate(
+        sbq_lc_scale =
+          ifelse(
+            str_detect(sbq_lc_scale, "repro_score")
+            , paste0(str_to_lower(sex), "_", sbq_lc_scale)
+            , sbq_lc_scale
+          )
+      ) |>
+      left_join(data_batch1_2_sbq_lc_max_scores, by = join_by(sbq_lc_scale)) |>
+      mutate(
+        sbq_lc_scale=
+          ifelse(
+            str_detect(sbq_lc_scale, "repro_score")
+            , str_remove_all(sbq_lc_scale, paste0(str_to_lower(sex), "_"))
+            , sbq_lc_scale
+          )
+      ) |>
+      select(-sex) |>
+      mutate(score = raw_score / max_score * 100) |>
+      select(-raw_score, -max_score) |>
+      mutate(sbq_lc_scale = factor(sbq_lc_scale, unique(sbq_lc_scale))) |>
+      spread(sbq_lc_scale, score) |>
+      select(-seq)
+  )[, colnames(data_batch1_2_raw13)]
+
+data_batch1_2_raw13 <-
+  data_batch1_2_raw13 |>
+  select(
+    id, regency, area, batch, exposure, severity, interview_onset, everything()
+  )
+```
+
+```{r Num var hist, eval=FALSE, fig.height=50, fig.width=7, include=FALSE}
+data_batch1_2_raw13 |>
+  select_if(
+    colnames(data_batch1_2_raw13) == "batch"
+    | sapply(data_batch1_2_raw13, class) == "numeric"
+  ) |>
+  select(-id) |>
+  gather(variable, value, -batch) |>
+  unite(variable_batch, variable, batch, sep = " - ") |>
+  mutate(variable_batch = factor(variable_batch, unique(variable_batch))) |>
+  ggplot(aes(value)) +
+  geom_histogram(binwidth = 0.1, na.rm = TRUE) +
+  facet_wrap(~ variable_batch, scales="free", ncol = 2)
+```
+
+```{r Determine trans. and desc. stats for numeric variables, include=FALSE}
+trans_data =
+  list(
+    none_avg_sd = # Outlier removal for avg. & SD is appropriate
+      c("interview_onset"
+        , "age_inf_date"
+        , "age_timestamp"
+        , "weight"
+        , "height"
+        , "moca_ina_total"
+      )
+    , none_med_iqr = # Outlier removal for avg. & SD is inappropriate
+        c("los"
+          , "cig_smoking_d"
+          , "breathing_score"
+          , "pain_score"
+          , "circulation_score"
+          , "fatique_score"
+          , "memory_thinking_communication_score"
+          , "movement_score"
+          , "sleep_score"
+          , "ent_score"
+          , "stomach_digestion_score"
+          , "muscle_joint_score"
+          , "mental_health_wellbeing_score"
+          , "skin_hair_score"
+          , "eye_score"
+          , "repro_score"
+          , "others_score"
+          , "daily_life_score"
+        )
+    , log = c()
+    , log2 = c()
+    , sqrt = c()
+    , disc =
+        c("prev_inf"
+          , "vaccine_dosage"
+          , "moca_ina_visuospatial_exec"
+          , "moca_ina_naming"
+          , "moca_ina_memory_min0"
+          , "moca_ina_memory_min5"
+          , "moca_ina_attention_digits"
+          , "moca_ina_attention_letters"
+          , "moca_ina_attention_substract"
+          , "moca_ina_language_repeat"
+          , "moca_ina_language_fluency"
+          , "moca_ina_abstraction"
+          , "moca_ina_delayed_recall"
+          , "moca_ina_orientation"
+        )
+  )
+```
+
+```{r med-iqr non-0 hist, eval=FALSE, fig.height=25, fig.width=7, include=FALSE}
+data_batch1_2_raw13 |>
+  select(-id) |>
+  select_at(c("batch", trans_data$none_med_iqr)) |>
+  gather(variable, value, -batch) |>
+  unite(variable_batch, variable, batch, sep=" - ") |>
+  mutate(variable_batch = factor(variable_batch, unique(variable_batch))) |>
+  filter(value > 0) |>
+  ggplot(aes(value)) +
+  geom_histogram(binwidth = 0.1, na.rm = TRUE) +
+  facet_wrap(~ variable_batch,  scales="free", ncol = 2)
+```
+
+```{r Apply transformation if any, include=FALSE}
+data_batch1_2_raw14 <-
+  data_batch1_2_raw13 |>
+  mutate_at(trans_data$log, log) |>
+  mutate_at(trans_data$log2, log2) |>
+  mutate_at(trans_data$sqrt, sqrt) |>
+  mutate_at(trans_data$disc, factor)
+```
+
+```{r Compute MoCA-INA total, include=FALSE}
+moca_ina_total_manual <-
+  data_batch1_2_raw14 |>
+  select_if(
+    colnames(data_batch1_2_raw14) |>
+      str_detect("^moca_ina_|^edu|interviewer_moca_ina")
+  )
+
+moca_ina_total_manual <-
+  moca_ina_total_manual |>
+  mutate_if(
+    !colnames(moca_ina_total_manual)
+     %in%c(
+       "education"
+       ,"moca_ina_total"
+       ,"moca_ina_class"
+       ,"interviewer_moca_ina"
+     )
+    , \(x) as.numeric(as.character(x))
+  ) |>
+  mutate(seq = seq(n())) |>
+  gather(
+    variable, value
+    , -seq, -education
+    , -moca_ina_memory_min0, -moca_ina_memory_min5
+    , -moca_ina_total, -moca_ina_class, -interviewer_moca_ina
+  ) |>
+  group_by(seq) |>
+  mutate(
+    moca_ina_total_manual =
+      sum(value, na.rm = TRUE) + as.numeric(education != "College")
+  ) |>
+  ungroup() |>
+  spread(variable, value, fill = 0) |>
+  arrange(seq)
+```
+
+```{r Check if MoCA-INA total is correctly input, eval=FALSE, include=FALSE}
+moca_ina_total_manual |>
+  select(
+    moca_ina_total, moca_ina_total_manual, education, interviewer_moca_ina
+  ) |>
+  filter(moca_ina_total != moca_ina_total_manual)
+```
+
+```{r Change MoCA-INA to manually-computed one, include=FALSE}
+data_batch1_2_raw15 <-
+  data_batch1_2_raw14 |>
+  mutate(seq = seq(n())) |>
+  left_join(
+    select(moca_ina_total_manual, seq, moca_ina_total_manual), by = join_by(seq)
+  ) |>
+  mutate(
+    moca_ina_total = moca_ina_total_manual
+    ,moca_ina_class = factor(as.numeric(moca_ina_total<26))
+  ) |>
+  select(-seq, -moca_ina_total_manual)
+```
+
+```{r Define vaccine status, include=FALSE}
+data_batch1_2_raw16 <-
+  data_batch1_2_raw15 |>
+  mutate(
+    vaccine = factor(ifelse(vaccine == 1, 2, ifelse(vaccine_dosage != 0, 1, 0)))
+  )
+```
+
+```{r Conclude end of data preprocessing, include=FALSE}
+data_batch1_2 <- data_batch1_2_raw16
+```
+
+```{r Extract preprocessed data batch 1, include=FALSE}
+data_batch1 <-
+  filter(data_batch1_2, batch == levels(batch)[1]) |>
+  arrange(id)
+```
+
+```{r Extract preprocessed data batch 2, include=FALSE}
+data_batch2 <-
+  filter(data_batch1_2, batch==levels(batch)[2]) |>
+  arrange(id)
+```
+
+# Descriptive analysis
+
+```{r Compute descriptive statistics, include=FALSE}
+data_batch1_2_desc0 <-
+  data_batch1_2 |>
+  desc_stats(var_med_iqr = trans_data$none_med_iqr , outlier_per_batch = TRUE)
+```
+
+```{r Variable list, include=FALSE}
+variable <-
+  data_batch1_2_desc0 |>
+  select(variable) |>
+  unique()
+```
+
+```{r Write variable list, eval=FALSE, include=FALSE}
+write_csv(variable, "inst/extdata/variable.csv")
+```
+
+```{r Read label and type of variable list, include=FALSE}
+variable_label_type <-
+  read_csv("inst/extdata/variable_label_type.csv", show_col_types = FALSE)
+```
+
+```{r Show additional variables with label and type, eval=FALSE, include=FALSE}
+variable_label_type |>
+  left_join(mutate(variable, included = 1), by = join_by(variable)) |>
+  filter(is.na(included))
+```
+
+```{r Relabel variables and classify them by variable type, include=FALSE}
+data_batch1_2_desc <-
+  data_batch1_2_desc0 |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(type = factor(type)) |>
+  arrange(type)
+```
+
+```{r Description of missing values and outliers, include=FALSE}
+tables1 <-
+  data_batch1_2_desc |>
+  filter(
+    (type == "Dependent variable, cognitive impairment of COVID-19"
+     & variable == "MoCA-INA status of cognitive impairment"
+    )
+    | (type == "Dependent variable, post-acute sequelae of COVID-19"
+       & str_detect(variable, " score$")
+      )
+    | !type
+       %in% c(
+         "Dependent variable, cognitive impairment of COVID-19"
+         , "Dependent variable, post-acute sequelae of COVID-19"
+       )
+  ) |>
+  filter(str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  filter(
+    !variable
+     %in% c(
+       "Female reproductive and sexual health score"
+       , "Male reproductive and sexual health score"
+     )
+  ) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables1 <-
+  tables1 |>
+  `colnames<-`(
+    colnames(tables1) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s1, echo=FALSE}
+tables1 |>
+  kable(
+    format = "html"
+    , caption = "Table S1. Description of missing values and outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position = "float_left")
+```
+
+```{r Write table-s1, eval=FALSE, include=FALSE}
+write_csv(tables1, "doc/tables1.csv")
+```
+
+```{r Description of non-missing values and non-outliers, include=FALSE}
+tables2 <-
+  data_batch1_2_desc |>
+  filter(
+    (type == "Dependent variable, cognitive impairment of COVID-19"
+     & variable == "MoCA-INA status of cognitive impairment"
+    )
+    | (type == "Dependent variable, post-acute sequelae of COVID-19"
+       & str_detect(variable, " score$")
+      )
+    | !type
+       %in% c(
+         "Dependent variable, cognitive impairment of COVID-19"
+         , "Dependent variable, post-acute sequelae of COVID-19"
+       )
+  ) |>
+  filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  filter(
+    !variable
+     %in% c(
+       "Female reproductive and sexual health score"
+       , "Male reproductive and sexual health score"
+     )
+  ) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables2 <-
+  tables2 |>
+  `colnames<-`(
+    colnames(tables2) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s2, echo=FALSE}
+tables2 |>
+  kable(
+    format = "html"
+    , caption = "Table S2. Description of non-missing values and non-outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s2, eval=FALSE, include=FALSE}
+write_csv(tables2, "doc/tables2.csv")
+```
+
+# Cluster analysis
+
+```{r Process and extract data batch 1 for cluster analysis, include=FALSE}
+data_batch1_cl_data0 <-
+  data_batch1[, str_detect(colnames(data_batch1),"_score")]
+```
+
+```{r Show missing values of SBQ-LC in batch 1, eval=FALSE, include=FALSE}
+data_batch1_cl_data0 |>
+  gather(variable,value) |>
+  group_by(variable) |>
+  summarize(n = n(), n_missing =sum(is.na(value))) |>
+  mutate(p_missing = round(n_missing / n * 100, 2))
+```
+
+```{r Conduct MICE for cluster data, include=FALSE}
+data_batch1_cl_data <-
+  data_batch1_cl_data0 |>
+  mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
+  complete()
+```
+
+```{r Conduct principal component analysis, include=FALSE}
+data_batch1_pca <-
+  data_batch1_cl_data |>
+  as.matrix() |>
+  prcomp(center = FALSE, scale = FALSE)
+```
+
+```{r Scree plot, include=FALSE}
+figures1 <-
+  data.frame(
+    pc = colnames(data_batch1_pca$x)
+    , sdev = data_batch1_pca$sdev
+  ) |>
+  mutate(pc = factor(pc, unique(pc))) |>
+  mutate(pve = sdev^2 / sum(sdev^2), cum_pve = cumsum(pve)) |>
+  ggplot(aes(as.numeric(pc), pve)) +
+  geom_line() +
+  geom_point() +
+  geom_text(
+    aes(label = paste0(round(cum_pve * 100, 2), "%"))
+    , size = 2, hjust = -0.1, vjust = -0.5
+  ) +
+  scale_x_continuous(
+    "Principal component", breaks = seq(length(data_batch1_pca$sdev))
+  ) +
+  scale_y_continuous("Proportion of variance explained")
+```
+
+```{r figure-s1, echo=FALSE, fig.height=3.5433, fig.width=5.5118}
+figures1
+```
+
+Figure S1. Scree plot
+
+```{r Save figure-s1, eval=FALSE, include=FALSE}
+figures1
+ggsave("doc/figures1.eps", height = 3.5433, width = 5.5118)
+```
+
+```{r Conduct k-mean cluster analysis, include=FALSE}
+set.seed(seed)
+data_batch1_kmean <-
+  data_batch1_cl_data |>
+  kmeans(centers = 3, algorithm = "Hartigan-Wong")
+```
+
+```{r Re-arrange cluster by PC1, include=FALSE}
+new_cluster <-
+  as.data.frame(data_batch1_pca$x) |>
+  select(PC1) |>
+  mutate(cluster = kmean_cluster(data_batch1_cl_data, data_batch1_kmean)) |>
+  group_by(cluster) |>
+  summarize(avg_PC1 = mean(PC1)) |>
+  arrange(desc(avg_PC1)) |>
+  mutate(new_cluster = seq(n())) |>
+  select(cluster, new_cluster)
+```
+
+```{r Extract PC1 per cluster, include=FALSE}
+pc1_cl <-
+  as.data.frame(data_batch1_pca$x) |>
+  select(PC1) |>
+  mutate(cluster = kmean_cluster(data_batch1_cl_data, data_batch1_kmean)) |>
+  arrange_cluster_by_pc1() |>
+  mutate(cluster=as.factor(cluster))
+
+pc1_cl <-
+  pc1_cl |> 
+  split(pc1_cl$cluster) |> 
+  lapply(pull, PC1)
+
+pc1_cl <-
+  pc1_cl |>
+  setNames(paste0("Cluster ", names(pc1_cl)))
+```
+
+```{r Fit density estimators of PC1 per cluster, include=FALSE}
+pc1_cl_density_estimators <-
+  pc1_cl |>
+  lapply(density)
+```
+
+```{r Interpolate new data using a density estimator, include=FALSE}
+pc1_cl_densities <-
+  names(pc1_cl) |>
+  setNames(names(pc1_cl)) |>
+  lapply(
+    \(x)
+    list(
+      x = seq(-400, 0, 0.1)
+      ,y =
+        seq(-400, 0, 0.1) |>
+        interpolate_density(pc1_cl_density_estimators[[x]]) |>
+        sapply(\(x) ifelse(is.na(x), 0, x))
+    )
+  )
+```
+
+```{r Compare densities of ggplot() and density(), eval=FALSE, include=FALSE}
+as.data.frame(data_batch1_pca$x) |>
+  select(PC1) |>
+  mutate(cluster = kmean_cluster(data_batch1_cl_data, data_batch1_kmean)) |>
+  arrange_cluster_by_pc1() |>
+  mutate(
+    cluster = factor(paste0("Cluster ", cluster))
+    , density_plot = "ggplot()"
+  ) |>
+  ggplot(aes(PC1, color = cluster)) +
+  geom_density(linewidth = 1) +
+  geom_line(
+    data =
+      pc1_cl_densities |>
+      imap(~ data.frame(PC1 = .x$x, density = .x$y, cluster = .y)) |>
+      reduce(rbind) |>
+      mutate(cluster = factor(cluster), density_plot = "density()")
+    , aes(y = density)
+    , linewidth = 1
+  ) +
+  facet_wrap(~ density_plot) +
+  scale_x_continuous(
+    "Total score", breaks = seq(-400, 0, 50), limits = c(-400, 0)
+  ) +
+  scale_y_continuous("Density") +
+  scale_color_discrete("Cluster") +
+  theme(
+    axis.text.x = element_blank()
+    , axis.ticks.x = element_blank()
+    , axis.title.x = element_blank()
+  )
+```
+
+```{r Intersections between all pairs of cluster densities, include=FALSE}
+pc1_cl_intersections <- as.data.frame(combn(names(pc1_cl_densities), 2))
+
+pc1_cl_intersections <-
+  pc1_cl_intersections |>
+  lapply(
+    \(x) find_intersections(pc1_cl_densities[[x[1]]], pc1_cl_densities[[x[2]]])
+  ) |>
+  setNames(
+    pc1_cl_intersections |>
+      sapply(paste0, collapse = "-") |>
+      str_replace_all("-Cluster ", "-")
+  )
+```
+
+```{r Check intersection among density lines, eval=FALSE, include=FALSE}
+density_intersection <-
+  str_remove_all(names(pc1_cl_intersections), "Cluster ") |>
+  lapply(\(x) str_split_fixed(x, "-", 2)[1, ]) |>
+  lapply(
+    \(x)
+    pc1_cl_densities[paste0("Cluster ", x)] |>
+      imap(~ data.frame(PC1 = .x$x, density = .x$y, cluster = .y)) |>
+      reduce(rbind) |>
+      mutate(
+        density_plot =
+          paste0(sort(unique(cluster)), collapse = "-") |>
+          str_replace_all("-Cluster ", "-")
+        ,intersection =
+          pc1_cl_intersections[[paste0("Cluster ", paste0(x, collapse = "-"))]]
+      )
+  ) |>
+  reduce(rbind) |>
+  mutate(cluster = as.factor(cluster))
+
+density_intersection |>
+  ggplot(aes(PC1, density, color = cluster)) +
+  geom_vline(aes(xintercept = intersection), lty = 2) +
+  geom_text(
+    data =
+      density_intersection |>
+      group_by(density_plot) |>
+      summarize(intersection = max(intersection))
+    , aes(intersection, max(density_intersection$density), label=intersection)
+    , color = "black", size = 3, hjust = 1.1, show.legend = FALSE
+  ) +
+  geom_line(linewidth = 1) +
+  facet_grid(density_plot ~ .) +
+  scale_x_continuous(
+    "Total score", breaks = seq(-400, 0, 50), limits = c(-400, 0)
+  ) +
+  scale_y_continuous("Density") +
+  scale_color_discrete("Cluster") +
+  theme(
+    axis.text.x = element_blank()
+    , axis.ticks.x = element_blank()
+    , axis.title.x = element_blank()
+  )
+```
+
+```{r Dens-hist of PC1-kclust-SBQ-LC, include=FALSE}
+figures2 <-
+  as.data.frame(data_batch1_pca$x) |>
+  select(PC1) |>
+  mutate(cluster = kmean_cluster(data_batch1_cl_data, data_batch1_kmean)) |>
+  arrange_cluster_by_pc1() |>
+  mutate(cluster = as.factor(cluster))
+
+figures2 <-
+  ggarrange(
+    figures2 |>
+      ggplot(aes(PC1, color = cluster)) +
+      geom_density(linewidth = 1, show.legend = FALSE) +
+      geom_vline(xintercept = unlist(pc1_cl_intersections), lty = 2) +
+      geom_text(
+        data =
+          data.frame(intersection = unlist(pc1_cl_intersections)) |>
+          mutate(
+            max_density =
+              pc1_cl_densities |>
+              lapply(\(x) x$y) |>
+              unlist() |>
+              max()
+          )
+        , aes(intersection, max_density, label = intersection)
+        , color = "black", size = 2.5, hjust = 1.1, show.legend = FALSE
+      ) +
+      scale_x_continuous(
+        "Total score", breaks = seq(-400, 0, 50), limits = c(-400, 0)
+      ) +
+      scale_y_continuous("Density") +
+      scale_color_discrete("Cluster") +
+      theme(
+        axis.text.x = element_blank()
+        , axis.ticks.x = element_blank()
+        , axis.title.x = element_blank()
+      )
+    ,figures2 |>
+      ggplot(aes(PC1, fill = cluster)) +
+      geom_histogram(binwidth = 5, show.legend = FALSE, na.rm = TRUE) +
+      geom_vline(xintercept = unlist(pc1_cl_intersections), lty = 2) +
+      facet_grid(cluster ~ ., scales = "free_y", switch = "y") +
+      scale_x_continuous(
+        "Principal component 1", breaks = seq(-400, 0, 50), limits = c(-400, 0)
+      ) +
+      scale_y_continuous("Frequency") +
+      scale_fill_discrete("Cluster") +
+      theme(strip.text.y.left = element_text(angle = 0))
+    ,nrow = 2, ncol = 1
+    ,widths = 7, heights = c(2, 3)
+  )
+```
+
+```{r figure-s2, echo=FALSE, fig.height=5.5118, fig.width=5.5118}
+figures2
+```
+
+Figure S2. Dens-hist of PC1-kclust-SBQ-LC
+
+```{r Save figure-s2, eval=FALSE, include=FALSE}
+figures2
+ggsave("doc/figures2.eps", height = 5.5118, width = 5.5118)
+```
+
+```{r Nomogram based on principal component 1 of SBQ-LC scores, include=FALSE}
+figures3 <- list()
+
+figures3[[1]] <- data_batch1_pca$rotation[, "PC1", drop = FALSE]
+
+figures3[[1]] <- figures3[[1]] %*% matrix(seq(0, 100, 10), nrow = 1)
+
+figures3[[1]] <-
+  as.data.frame(figures3[[1]]) |>
+  `colnames<-`(seq(0,100,10)) |>
+  rownames_to_column(var = "scale") |>
+  left_join(
+    rename(variable_label_type, scale = variable), by = join_by(scale)
+  ) |>
+  mutate(scale = str_remove_all(label, " score")) |>
+  select(-label, -type) |>
+  gather(tick, PC1, -scale) |>
+  mutate(
+    scale = factor(scale, rev(unique(scale)))
+    , tick = ifelse(tick %in% as.character(seq(0, 100, 50)), 0.5, 0.2)
+    , start = 0
+  ) |>
+  ggplot(aes(scale)) +
+  geom_errorbar(aes(ymin = start, ymax = PC1, width = tick)) +
+  coord_flip() +
+  xlab("") +
+  scale_y_continuous(breaks = seq(-40, 0, 5), limits = c(-40, 0)) +
+  theme(
+    panel.border = element_blank()
+    , axis.ticks.y = element_blank()
+    , axis.line.x = element_line()
+  )
+
+figures3[[2]] <-
+  matrix(seq(-400, 0, 10), nrow = 1, byrow = TRUE) |>
+  as.data.frame() |>
+  `rownames<-`("Total") |>
+  `colnames<-`(seq(-400, 0, 10)) |>
+  rownames_to_column(var = "scale") |>
+  gather(tick, PC1, -scale) |>
+  mutate(
+    scale = factor(scale, rev(unique(scale)))
+    , tick = ifelse(tick %in% as.character(seq(-400, 0, 50)), 0.5, 0.2)
+    , start = 0
+  ) |>
+  ggplot(aes(scale)) +
+  geom_hline(
+    yintercept = unlist(pc1_cl_intersections)[c("Cluster 1-2", "Cluster 2-3")]
+    , lty = 2
+  ) +
+  geom_errorbar(aes(ymin = start, ymax = PC1, width = tick)) +
+  coord_flip() +
+  xlab("") +
+  scale_y_continuous(breaks = seq(-400, 0, 50), limits = c(-400, 0)) +
+  theme(
+    panel.border = element_blank()
+    , axis.ticks.y = element_blank()
+    , axis.line.x = element_line()
+  )
+
+figures3 <-
+  ggarrange(
+    figures3[[1]]
+    , figures3[[2]]
+    , nrow = 2, ncol = 1
+    , widths = 7, heights = c(4, 1)
+  )
+```
+
+
+```{r figure-s3, echo=FALSE, fig.height=5.5118, fig.width=5.5118}
+figures3
+```
+
+Figure S3. Nomogram based on principal component 1 of SBQ-LC scores
+
+```{r Save figure-s3, eval=FALSE, include=FALSE}
+figures3
+ggsave("doc/figures3.eps", height = 5.5118, width = 5.5118)
+```
+
+```{r Dens-hist of the avgnormscores-kclust-SBQ-LC, include=FALSE}
+figures4 <-
+  data_batch1_cl_data |>
+  rownames_to_column(var = "seq") |>
+  gather(scale, score, -seq) |>
+  group_by(seq) |>
+  summarize(avg_score = mean(score)) |>
+  column_to_rownames(var = "seq") |>
+  mutate(cluster = kmean_cluster(data_batch1_cl_data, data_batch1_kmean)) |>
+  arrange_cluster_by_pc1() |>
+  mutate(cluster = as.factor(cluster))
+
+figures4 <-
+  ggarrange(
+    figures4 |>
+      ggplot(aes(avg_score, color = cluster)) +
+      geom_vline(xintercept = c(7.8), lty = 2) +
+      geom_density(linewidth = 1, show.legend = FALSE) +
+      scale_x_continuous(
+       "Average score per subject"
+       , breaks = seq(-10, 50, 10), limits = c(-10, 50)
+      ) +
+      scale_y_continuous("Density") +
+      scale_color_discrete("Cluster") +
+      theme(
+        axis.text.x = element_blank()
+        , axis.ticks.x = element_blank()
+        , axis.title.x = element_blank()
+      )
+    , figures4 |>
+      ggplot(aes(avg_score, fill = cluster)) +
+      geom_vline(xintercept = c(7.8), lty = 2) +
+      geom_histogram(binwidth = 5, show.legend = FALSE, na.rm = TRUE) +
+      facet_grid(cluster ~ ., scales = "free_y", switch = "y") +
+      scale_x_continuous(
+        "Average score per subject"
+        , breaks = seq(-10, 50, 10), limits = c(-10, 50)
+      ) +
+      scale_y_continuous("Frequency") +
+      scale_fill_discrete("Cluster") +
+      theme(strip.text.y.left = element_text(angle = 0))
+    , nrow = 2, ncol = 1
+    , widths = 7, heights = c(2, 3)
+  )
+```
+
+```{r figure-s4, echo=FALSE, fig.height=5.5118, fig.width=5.5118}
+figures4
+```
+
+Figure S4. Dens-hist of the avgnormscores-kclust-SBQ-LC
+
+```{r Save figure-s4, eval=FALSE, include=FALSE}
+figures4
+ggsave("doc/figures4.eps", height = 5.5118, width = 5.5118)
+```
+
+```{r Visualize the rotation matrix of PC1, include=FALSE}
+figures5 <-
+  data_batch1_pca$rotation |>
+  as.data.frame() |>
+  select(PC1) |>
+  rownames_to_column(var = "scale") |>
+  left_join(
+    rename(variable_label_type, scale = variable) , by = join_by(scale)
+  ) |>
+  mutate(scale = str_remove_all(label, " score")) |>
+  mutate(scale = reorder(scale, desc(PC1))) |>
+  ggplot(aes(scale, PC1)) +
+  geom_col() +
+  coord_flip() +
+  xlab("") +
+  ylab("Weight of PC1")
+```
+
+```{r figure-s5, echo=FALSE, fig.height=5.5118, fig.width=5.5118}
+figures5
+```
+
+Figure S5. Visualize the rotation matrix of PC1
+
+```{r Save figure-s5, eval=FALSE, include=FALSE}
+figures5
+ggsave("doc/figures5.eps", height = 5.5118, width = 5.5118)
+```
+
+# Multivariate regression analysis
+
+## Handling missing outcome
+
+```{r Process and extract data batch 2 of SBQ-LC scores, include=FALSE}
+data_batch2_mv_data0 <- data_batch2[,str_detect(colnames(data_batch2),"_score")]
+```
+
+```{r Show missing values  of SBQ-LC in batch 2, eval=FALSE, include=FALSE}
+data_batch2_mv_data0 |>
+  gather(variable,value) |>
+  group_by(variable) |>
+  summarize(n = n(), n_missing = sum(is.na(value))) |>
+  mutate(p_missing = round(n_missing / n * 100, 2))
+```
+
+```{r Develop imputation model from SBQ-LC in batch 2, include=FALSE}
+data_batch2_imputation_model <-
+  data_batch2_mv_data0 |>
+  mice(m = 10, method="pmm", seed = seed, print = FALSE)
+```
+
+```{r Conduct MICE for SBQ-LC in batch 2, include=FALSE}
+data_batch2_mv_data1 <-
+  data_batch2_mv_data0 |>
+  mice(
+    m = 10
+    , method="norm.predict"
+    , predictorMatrix = data_batch2_imputation_model$predictorMatrix
+    , seed = seed
+    , print = FALSE
+  ) |>
+  complete()
+```
+
+```{r Process and extract data batch 1 & 2 of SBQ-LC scores, include=FALSE}
+data_batch1_2_preval_data0 <-
+  data_batch1_2[,str_detect(colnames(data_batch1_2),"_score")]
+```
+
+```{r Show missing values  of SBQ-LC in batch 1 & 2, eval=FALSE, include=FALSE}
+data_batch1_2_preval_data0 |>
+  gather(variable, value) |>
+  group_by(variable) |>
+  summarize(n = n(), n_missing = sum(is.na(value))) |>
+  mutate(p_missing = round(n_missing / n * 100, 2))
+```
+
+```{r Conduct MICE for SBQ-LC in batch 1 & 2 based on batch 2, include=FALSE}
+data_batch1_2_preval_data1 <-
+  data_batch1_2_preval_data0 |>
+  mice(
+    m = 10
+    , method = "norm.predict"
+    , predictorMatrix = data_batch2_imputation_model$predictorMatrix
+    , seed = seed
+    , print = FALSE
+  ) |>
+  complete()
+```
+
+## Outcome-wise descriptive analysis and handling missing other variables
+
+```{r Process and extract data batch 2 for multivar reg analysis, include=FALSE}
+data_batch2_mv_data <-
+  data_batch2_mv_data1 |>
+  mutate(seq = seq(nrow(data_batch2_mv_data1))) |>
+  gather(colname, new_score, -seq)
+
+data_batch2_mv_data <-
+  data_batch2_mv_data |>
+  rbind(
+    group_by(data_batch2_mv_data, seq) |>
+      summarize(new_score = mean(is.na(new_score)) == 0) |>
+      mutate(colname = "complete") |>
+      select(colname, new_score, everything())
+  ) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname, new_score) |>
+  arrange(seq) |>
+  filter(complete == 1) |>
+  select(-complete) |>
+  column_to_rownames(var = "seq") |>
+  as.matrix()
+
+data_batch2_mv_data <-
+  data_batch2_mv_data %*% data_batch1_pca$rotation[, "PC1", drop = FALSE]
+
+data_batch2_mv_data <-
+  as.data.frame(data_batch2_mv_data) |>
+  rownames_to_column(var = "seq") |>
+  mutate(seq = as.numeric(seq)) |>
+  rename(sbq_lc_total = PC1) |>
+  right_join(
+    data_batch2 |>
+      mutate(seq = seq(nrow(data_batch2))) |>
+      select(seq)
+    , by = join_by(seq)
+  ) |>
+  mutate(
+    sbq_lc_class =
+      case_when(
+        sbq_lc_total > pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 1"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 1-2`
+          & sbq_lc_total > pc1_cl_intersections$`Cluster 2-3`
+          ~ "Cluster 2"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 2-3`
+          ~ "Cluster 3"
+      ) |>
+      factor(c("Cluster 1", "Cluster 2", "Cluster 3"))
+  ) |>
+  left_join(
+    data_batch2[
+      , !str_detect(colnames(data_batch2),"_score")
+        | colnames(data_batch2)=="memory_thinking_communication_score"
+      ] |>
+      mutate(seq = seq(nrow(data_batch2)))
+    , by = join_by(seq)
+  ) |>
+  arrange(seq) |>
+  column_to_rownames(var = "seq") |>
+  mutate(
+    bmi = weight / ((height/100)^2)
+    , bmi =
+      case_when(
+        bmi < 18.5 ~ "Underweight"
+        , bmi >= 18.5 & bmi < 25 ~ "Normal"
+        , bmi >= 25 & bmi < 30 ~ "Overweight"
+        , bmi >= 30 ~ "Obesity"
+      ) |>
+      factor(c("Underweight", "Normal", "Overweight", "Obesity"))
+  ) |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          label == "MoCA-INA status of cognitive impairment"
+          | label == "SBQ-LC cluster of post-acute sequelae"
+          | type
+            %in% c(
+              "Independent variable"
+              , "Independent variable, indicator"
+              , "Memory-independent covariate"
+              , "Memory-dependent covariate"
+            )
+          | label
+            %in% c(
+              "Memory, thinking, and communication score"
+              , "SBQ-LC interviewer"
+              , "Delayed recall"
+              , "MoCA-INA interviewer"
+            )
+        ) |>
+        arrange(
+          factor(
+            type
+            , c("Independent variable"
+                , "Independent variable, indicator"
+                , "Memory-independent covariate"
+                , "Memory-dependent covariate"
+                , "Dependent variable, post-acute sequelae of COVID-19"
+                , "Dependent variable, cognitive impairment of COVID-19"
+              )
+          )
+        ) |>
+        pull(variable)
+    )
+  )
+```
+
+### SBQ-LC descriptive analytics
+
+```{r Separate data for SBQ-LC descriptive analytics, include=FALSE}
+data_batch2_sbq_lc_mv_data0 <-
+  data_batch2_mv_data |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          label == "SBQ-LC cluster of post-acute sequelae"
+          | type
+            %in% c(
+              "Independent variable"
+              , "Memory-independent covariate"
+              , "Memory-dependent covariate"
+            )
+          | label
+            %in% c(
+              "Memory, thinking, and communication score"
+              , "SBQ-LC interviewer"
+              , "Delayed recall"
+              , "MoCA-INA interviewer"
+            )
+        ) |>
+        arrange(
+          factor(
+            type
+            , c("Independent variable"
+                , "Memory-independent covariate"
+                , "Memory-dependent covariate"
+                , "Dependent variable, post-acute sequelae of COVID-19"
+                , "Dependent variable, cognitive impairment of COVID-19"
+              )
+          )
+        ) |>
+        pull(variable)
+    )
+  ) |>
+  rename(batch = sbq_lc_class)
+```
+
+```{r Compute descriptive statistics for SBQ-LC pre-impute, include=FALSE}
+data_batch2_sbq_lc_desc0 <-
+  data_batch2_sbq_lc_mv_data0 |>
+  desc_stats(var_med_iqr = trans_data$none_med_iqr, outlier_per_batch = FALSE)
+```
+
+```{r Relabel var. & classify  by var. type SBQ-LC pre-impute, include=FALSE}
+data_batch2_sbq_lc_desc1 <-
+  data_batch2_sbq_lc_desc0 |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type)
+    , type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r SBQ-LC - Description of missing values and outliers, include=FALSE}
+tables3 <-
+  data_batch2_sbq_lc_desc1 |>
+  filter(str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables3 <-
+  tables3 |>
+  `colnames<-`(
+    colnames(tables1) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s3, echo=FALSE}
+tables3 |>
+  kable(
+    format = "html"
+    , caption = "Table S3. SBQ-LC - Description of missing values and outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position = "float_left")
+```
+
+
+```{r Write table-s3, eval=FALSE, include=FALSE}
+write_csv(tables3, "doc/tables3.csv")
+```
+
+```{r Conduct MICE for SBQ-LC multivariate data, include=FALSE}
+data_batch2_sbq_lc_mv_data1 <-
+  data_batch2_sbq_lc_mv_data0 |>
+  mutate(interview_onset = age_timestamp - age_inf_date)
+
+data_batch2_sbq_lc_mv_data1 <-
+  suppressWarnings(
+    cbind(
+      data_batch2_sbq_lc_mv_data1 |>
+        select(id, age_timestamp, age_inf_date)
+      , data_batch2_sbq_lc_mv_data1 |>
+        select(-id, -age_timestamp, -age_inf_date) |>
+        assign_missing(var_med_iqr = trans_data$none_med_iqr) |>
+        mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
+        complete()
+    )
+  ) |>
+  mutate(age_inf_date = age_timestamp - interview_onset) |>
+  select(
+    id, interview_onset, exposure, vaccine, regency,area, age_timestamp
+    , everything()
+  )
+```
+
+```{r Compute descriptive statistics for SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_desc2 <-
+  data_batch2_sbq_lc_mv_data1 |>
+  desc_stats(var_med_iqr = trans_data$none_med_iqr)
+```
+
+```{r Compute vertical-desc statistics for SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_desc2_ver <-
+  data_batch2_sbq_lc_mv_data1 |>
+  desc_stats_vertical() |>
+  mutate(variable = ifelse(variable == "batch", "sbq_lc_class", variable))
+```
+
+```{r Compute vertical-desc statistics for SBQ-LC per outcome, include=FALSE}
+data_batch2_sbq_lc_desc2_ver_outcome <-
+  data_batch2_sbq_lc_mv_data1 |>
+  desc_stats_vertical(p_row = TRUE) |>
+  mutate(variable = ifelse(variable == "batch", "sbq_lc_class", variable))
+```
+
+```{r Relabel variables & classify them by variable type SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_desc3 <-
+  data_batch2_sbq_lc_desc2 |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type)
+    , type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r Relabel variables & classify desc-ver by var type SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_desc3_ver <-
+  data_batch2_sbq_lc_desc2_ver |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type)
+    , type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r SBQ-LC - Description of pre-imputed non-missing-outliers, include=FALSE}
+tables4 <-
+  data_batch2_sbq_lc_desc1 |>
+  filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables4 <-
+  tables4 |>
+  `colnames<-`(
+    colnames(tables4) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+
+```{r table-s4, echo=FALSE}
+tables4 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S4. SBQ-LC - Description of pre-imputed non-missing-outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+
+```{r Save table-s4, eval=FALSE, include=FALSE}
+write_csv(tables4, "doc/tables4.csv")
+```
+
+```{r Previous description of SBQ-LC multivariate data, include=FALSE}
+tables5 <-
+  data_batch2_sbq_lc_desc3 |>
+  filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables5 <-
+  tables5 |>
+  `colnames<-`(
+    colnames(tables5) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+
+```{r table-s5, echo=FALSE}
+tables5 |>
+  kable(
+    format = "html"
+    , caption = "Table S5. Previous description of SBQ-LC multivariate data"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+
+```{r Write table-s5, eval=FALSE, include=FALSE}
+write_csv(tables5, "doc/tables5.csv")
+```
+
+```{r Description of SBQ-LC multivariate data, include=FALSE}
+tables6 <-
+  data_batch2_sbq_lc_desc3_ver |>
+  filter(!is.na(category)) |>
+  mutate_at(
+    c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  ) |>
+  mutate(
+    category=
+      case_when(
+        category == "Mild" ~ "Mild >1 years ago"
+        , category == "Moderate-to-severe"
+          ~ "Moderate-to-severe, or mild within the last year"
+        , TRUE ~ category
+      )
+  )
+
+tables6 <-
+  tables6 |>
+  `colnames<-`(
+    colnames(tables6) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("N", "Num. (N=210)") |>
+      str_replace_all("P", "%")
+  )
+```
+
+
+```{r table-s6, echo=FALSE}
+tables6 |>
+  kable(
+    format = "html"
+    , caption = "Table S6. Description of SBQ-LC multivariate data"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s6, eval=FALSE, include=FALSE}
+write_csv(tables6, "doc/tables6.csv")
+```
+
+```{r Create dichotomic outcome SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_mv_data2 <-
+  data_batch2_sbq_lc_mv_data1 |>
+  select(id, interview_onset, batch) |>
+  rownames_to_column(var = "seq") |>
+  mutate_at("seq", as.numeric) |>
+  mutate(
+    interview_onset = floor(interview_onset * dyears(1) / dmonths(1))
+    , value = 1
+  ) |>
+  spread(batch, value, fill = 0) |>
+  column_to_rownames(var = "seq") |>
+  arrange(interview_onset) |>
+  gather(batch, outcome, -id, -interview_onset) |>
+  mutate(
+    batch = ifelse(batch == "Cluster 1", "Cluster 2+3", batch)
+    , outcome =
+      ifelse(batch == "Cluster 1", ifelse(outcome == 1, 0, 1), outcome)
+  ) |>
+  filter(batch != levels(data_batch2_sbq_lc_mv_data1$batch)[1]) |>
+  right_join(
+    select(data_batch2_sbq_lc_mv_data1, -interview_onset,-batch)
+    , by = join_by(id)
+  )
+```
+
+```{r Kaplan-Meier SBQ-LC estimator and sample size per month, include=FALSE}
+figures6 <-
+  data_batch2_sbq_lc_mv_data2 |>
+  # mutate(batch = paste0(batch, " vs. others")) |>
+  mutate_at("batch", str_remove_all, "Cluster ") |>
+  rename_at("batch", \(x) "Cluster")
+
+figures6 <-
+  ggsurvplot(
+    fit =
+      survfit(
+        "Surv(interview_onset, outcome, type = 'left') ~ batch" |>
+          str_replace_all("batch", "Cluster") |>
+          as.formula()
+        , data = figures6
+      )
+    , data = figures6
+    , risk.table = TRUE
+    , pval = FALSE
+    , conf.int = FALSE
+    , break.time.by = 1
+  )
+
+figures6 <- figures6[1:2]
+
+figures6 <-
+  suppressMessages(
+    ggarrange(
+      ggarrange(
+        NULL
+        , figures6$plot +
+          scale_x_continuous(
+            "Month", breaks = seq(0, 48, 12), labels = \(x) x * 1
+          ) +
+          scale_y_continuous("Event Rate", labels = \(x) x)
+        , ncol = 2
+        , nrow = 1
+        , widths = c(0.5, 9.5)
+      )
+      , figures6$table +
+        ggtitle("Sample size") +
+        scale_x_continuous(
+          "Month", breaks = seq(0, 48, 12), labels = \(x) x * 1
+        ) +
+        scale_y_discrete("Outcome")
+      , ncol = 1
+      , nrow = 2
+      , heights = c(3, 2)
+    )
+  )
+```
+
+```{r figure-s6, echo=FALSE, fig.height=7, fig.width=15}
+figures6
+```
+
+Figure S6. Kaplan-Meier SBQ-LC estimator and sample size per month
+
+```{r Save figure-s6, eval=FALSE, include=FALSE}
+figures6
+ggsave("doc/figures6.eps", height = 7, width = 15)
+```
+
+```{r Finalize multivariate data SBQ-LC, include=FALSE}
+data_batch2_sbq_lc_mv_data <- sort(unique(data_batch2_sbq_lc_mv_data2$batch))
+
+data_batch2_sbq_lc_mv_data <-
+  data_batch2_sbq_lc_mv_data |>
+  `names<-`(as.character(data_batch2_sbq_lc_mv_data)) |>
+  lapply(\(x) filter(data_batch2_sbq_lc_mv_data2, batch == x))
+```
+
+### MoCA-INA descriptive analytics
+
+```{r Separate data for MoCA-INA descriptive analytics, include=FALSE}
+data_batch2_moca_ina_mv_data0 <-
+  data_batch2_mv_data |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          label == "MoCA-INA status of cognitive impairment"
+          | type
+            %in% c(
+              "Independent variable"
+              , "Memory-independent covariate"
+              , "Memory-dependent covariate"
+            )
+          | label
+            %in% c(
+              "Memory, thinking, and communication score"
+              , "SBQ-LC interviewer"
+              , "Delayed recall"
+              , "MoCA-INA interviewer"
+            )
+        ) |>
+        arrange(
+          factor(
+            type
+            , c("Independent variable"
+                , "Memory-independent covariate"
+                , "Memory-dependent covariate"
+                , "Dependent variable, post-acute sequelae of COVID-19"
+                , "Dependent variable, cognitive impairment of COVID-19"
+              )
+          )
+        ) |>
+        pull(variable)
+    )
+  ) |>
+  mutate(
+    moca_ina_class =
+      ifelse(
+        as.character(moca_ina_class) == "1", "CI positive", "CI negative"
+      ) |>
+      factor(c("CI negative", "CI positive"))
+  ) |>
+  rename(batch = moca_ina_class)
+```
+
+```{r Compute descriptive statistics for MoCA-INA pre-impute, include=FALSE}
+data_batch2_moca_ina_desc0 <-
+  data_batch2_moca_ina_mv_data0 |>
+  desc_stats(var_med_iqr = trans_data$none_med_iqr, outlier_per_batch = FALSE)
+```
+
+```{r Relabel var. & classify  by var. type MoCA-INA pre-impute, include=FALSE}
+data_batch2_moca_ina_desc1 <-
+  data_batch2_moca_ina_desc0 |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type), type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r MoCA-INA - Description of missing values and outliers, include=FALSE}
+tables7 <-
+  data_batch2_moca_ina_desc1 |>
+  filter(str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables7 <-
+  tables7 |>
+  `colnames<-`(
+    colnames(tables7) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s7, echo=FALSE}
+tables7 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S7. MoCA-INA - Description of missing values and outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position = "float_left")
+```
+
+```{r Write table-s7, eval=FALSE, include=FALSE}
+write_csv(tables7,"doc/tables7.csv")
+```
+
+```{r Conduct MICE for MoCA-INA multivariate data, include=FALSE}
+data_batch2_moca_ina_mv_data1 <-
+  data_batch2_moca_ina_mv_data0 |>
+  mutate(interview_onset = age_timestamp - age_inf_date)
+
+data_batch2_moca_ina_mv_data1 <-
+  suppressWarnings(
+    cbind(
+      select(data_batch2_moca_ina_mv_data1, id,age_timestamp,age_inf_date)
+      , data_batch2_moca_ina_mv_data1 |>
+        select(-id, -age_timestamp, -age_inf_date) |>
+        assign_missing(var_med_iqr = trans_data$none_med_iqr) |>
+        mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
+        complete()
+    )
+  ) |>
+  mutate(age_inf_date = age_timestamp - interview_onset) |>
+  select(
+    id, interview_onset, exposure, vaccine, regency, area, age_timestamp
+    , everything()
+  )
+```
+
+```{r Compute descriptive statistics for MoCA-INA, include=FALSE}
+data_batch2_moca_ina_desc2 <-
+  data_batch2_moca_ina_mv_data1 |>
+  desc_stats(var_med_iqr = trans_data$none_med_iqr)
+```
+
+```{r Compute vertical-desc statistics for MoCA-INA, include=FALSE}
+data_batch2_moca_ina_desc2_ver <-
+  data_batch2_moca_ina_mv_data1 |>
+  desc_stats_vertical() |>
+  mutate(variable = ifelse(variable == "batch", "moca_ina_class", variable))
+```
+
+```{r Compute vertical-desc statistics for MoCA-INA per outcome, include=FALSE}
+data_batch2_moca_ina_desc2_ver_outcome <-
+  data_batch2_moca_ina_mv_data1 |>
+  desc_stats_vertical(p_row = TRUE) |>
+  mutate(variable=ifelse(variable == "batch", "moca_ina_class", variable))
+```
+
+```{r Relabel var. & classify them by var. type MoCA-INA, include=FALSE}
+data_batch2_moca_ina_desc3 <-
+  data_batch2_moca_ina_desc2 |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type)
+    , type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r Relabel var. & classify desc-ver by var. type MoCA-INA, include=FALSE}
+data_batch2_moca_ina_desc3_ver <-
+  data_batch2_moca_ina_desc2_ver |>
+  left_join(variable_label_type, by = join_by(variable)) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  select(type, everything()) |>
+  mutate(
+    type = factor(type)
+    , type = factor(type, levels(type)[c(1,2,3,4,6,5)])
+  ) |>
+  arrange(type)
+```
+
+```{r MoCA-INA - Description of pre-imputed non-missing-outliers, include=FALSE}
+tables8 <-
+  data_batch2_moca_ina_desc1 |>
+  filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables8 <-
+  tables8 |>
+  `colnames<-`(
+    colnames(tables8) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s8, echo=FALSE}
+tables8 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S8. MoCA-INA - Description of pre-imputed non-missing-outliers"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s8, eval=FALSE, include=FALSE}
+write_csv(tables8, "doc/tables8.csv")
+```
+
+```{r Previous description of MoCA-INA multivariate data, include=FALSE}
+tables9 <-
+  data_batch2_moca_ina_desc3 |>
+  filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
+  mutate_at(
+    c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  )
+
+tables9 <-
+  tables9 |>
+  `colnames<-`(
+    colnames(tables9) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("N=", "n=")
+  )
+```
+
+```{r table-s9, echo=FALSE}
+tables9 |>
+  kable(
+    format = "html"
+    , caption = "Table S9. Previous description of MoCA-INA multivariate data"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s9, eval=FALSE, include=FALSE}
+write_csv(tables9, "doc/tables9.csv")
+```
+
+```{r Description of MoCA-INA multivariate data, include=FALSE}
+tables10 <-
+  data_batch2_moca_ina_desc3_ver |>
+  filter(!is.na(category)) |>
+  mutate_at(
+    c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
+  ) |>
+  mutate(
+    category =
+      case_when(
+        category == "Mild"~"Mild >1 years ago"
+        , category == "Moderate-to-severe"
+          ~ "Moderate-to-severe, or mild within the last year"
+        , TRUE ~ category
+      )
+  )
+
+tables10 <-
+  tables10 |>
+  `colnames<-`(
+    colnames(tables10) |>
+      str_replace_all("category", "") |>
+      str_to_sentence() |>
+      str_replace_all("N", "Num. (N=210)") |>
+      str_replace_all("P", "%")
+  )
+```
+
+```{r table-s10, echo=FALSE}
+tables10 |>
+  kable(
+    format = "html"
+    , caption = "Table S10. Description of MoCA-INA multivariate data"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-2, eval=FALSE, include=FALSE}
+write_csv(tables10, "doc/tables10.csv")
+```
+
+```{r Create dichotomic outcome MoCA-INA, include=FALSE}
+data_batch2_moca_ina_mv_data2 <-
+  data_batch2_moca_ina_mv_data1 |>
+  select(id, interview_onset, batch) |>
+  rownames_to_column(var = "seq") |>
+  mutate_at("seq", as.numeric) |>
+  mutate(
+    interview_onset = floor(interview_onset * dyears(1) / dmonths(1))
+    , value = 1
+  ) |>
+  spread(batch, value, fill = 0) |>
+  column_to_rownames(var = "seq") |>
+  arrange(interview_onset) |>
+  gather(batch, outcome, -id, -interview_onset) |>
+  filter(batch != levels(data_batch2_moca_ina_mv_data1$batch)[1]) |>
+  right_join(
+    select(data_batch2_moca_ina_mv_data1, -interview_onset, -batch)
+    , by = join_by(id)
+  )
+```
+
+```{r Kaplan-Meier MoCA-INA estimator and sample size per month, include=FALSE}
+figures7 <-
+  data_batch2_moca_ina_mv_data2 |>
+  mutate(batch = paste0(batch, " vs. others")) |>
+  mutate_at("batch", str_remove_all, "CI ") |>
+  rename_at("batch", \(x) "CI")
+
+figures7 <-
+  ggsurvplot(
+    fit =
+      survfit(
+        "Surv(interview_onset, outcome, type='left') ~ batch" |>
+          str_replace_all("batch", "CI") |>
+          as.formula()
+        , data = figures7
+      )
+    , data = figures7
+    , risk.table = TRUE
+    , pval = FALSE
+    , conf.int = FALSE
+    , break.time.by = 1
+  )[1:2]
+
+figures7 <-
+  suppressMessages(
+    ggarrange(
+      ggarrange(
+        NULL
+        , figures7$plot +
+          scale_x_continuous(
+            "Month", breaks = seq(0, 48, 12), labels = \(x) x * 1
+          ) +
+          scale_y_continuous("Event Rate", labels = \(x)x)
+        , ncol = 2
+        , nrow = 1
+        , widths = c(0, 10)
+      )
+      , figures7$table +
+        ggtitle("Sample size") +
+        scale_x_continuous(
+          "Month", breaks = seq(0, 48, 12), labels = \(x) x * 1
+        ) +
+        scale_y_discrete("Outcome")
+      , ncol = 1
+      , nrow = 2
+      , heights = c(3, 2)
+    )
+  )
+```
+
+```{r figure-s7, echo=FALSE, fig.height=6, fig.width=15}
+figures7
+```
+
+Figure S7. Kaplan-Meier MoCA-INA estimator and sample size per month
+
+```{r Save figure-s7, eval=FALSE, include=FALSE}
+figures7
+ggsave("doc/figures7.eps", height = 6, width = 15)
+```
+
+```{r Finalize multivariate data MoCA-INA, include=FALSE}
+data_batch2_moca_ina_mv_data <- data_batch2_moca_ina_mv_data2
+```
+
+## Statistical inference
+
+```{r Determine variables beyond independent variables, include=FALSE}
+# Non-independent variables
+non_indep <-
+  c("id"
+    , "interview_onset"
+    , "batch"
+    , "outcome"
+  )
+
+# Measurement-error variables
+mea_err_var <-
+  c("memory_thinking_communication_score"
+    , "moca_ina_delayed_recall"
+    , "interviewer_sbq_lc"
+    , "interviewer_moca_ina")
+```
+
+### Univariate LR for assessing the need to correct measurement errors
+
+```{r Conduct univariate LR, include=FALSE}
+unilr_results <-
+  data_batch2_sbq_lc_mv_data |>
+  lapply(select_at, c(non_indep, mea_err_var[-1])) |>
+  lapply(univar_lr) |>
+  c(list(
+      `CI positive` =
+        data_batch2_moca_ina_mv_data |>
+        select_at(c(non_indep, mea_err_var[-2])) |>
+        univar_lr()
+    )
+  )
+```
+
+```{r Summarize univariate LR results, include=FALSE}
+unilr_results_sum <-
+  unilr_results |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  )
+```
+
+```{r Measurement-error factors of CI positive, include=FALSE}
+tables11 <-
+  unilr_results_sum$`CI positive` |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI,")")) |>
+  unite(OR, OR, CI, sep = " ")
+
+tables11 <-
+  tables11 |>
+  `colnames<-`(
+    colnames(tables11) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Or", "OR (95% CI)")
+  )
+```
+
+```{r table-s11, echo=FALSE}
+tables11 |>
+  kable(
+    format = "html"
+    , caption = "Table S11. Measurement-error factors of CI positive"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s11, eval=FALSE, include=FALSE}
+write_csv(tables11, "doc/tables11.csv")
+```
+
+### Univariate Cox-PH for determining either independent variables or covariates
+
+```{r Conduct univariate Cox-PH, include=FALSE}
+unicox_results_sbq_lc <-
+  data_batch2_sbq_lc_mv_data |>
+  lapply(\(x) select_at(x, colnames(x)[!colnames(x) %in% mea_err_var])) |>
+  lapply(univar_coxph)
+
+unicox_results_moca_ina <-
+  data_batch2_moca_ina_mv_data |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate_at("outcome", as.factor) |>
+      select(id, sbq_lc_class = outcome)
+    , by = join_by(id)
+  )
+
+unicox_results_moca_ina <-
+  unicox_results_moca_ina |>
+  select_at(
+    colnames(unicox_results_moca_ina)[
+      !colnames(unicox_results_moca_ina) %in% mea_err_var[-4]
+    ]
+  ) |>
+  univar_coxph(covariates = "interviewer_moca_ina")
+
+unicox_results <-
+  unicox_results_sbq_lc |>
+  c(list(`CI positive` = unicox_results_moca_ina))
+```
+
+```{r Summarize univariate Cox-PH results, include=FALSE}
+unicox_results_sum <-
+  unicox_results |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  )
+```
+
+```{r Associated factors of cluster 2, include=FALSE}
+tables12 <-
+  unicox_results_sum$`Cluster 2` |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables12 <-
+  tables12 |>
+  `colnames<-`(
+    colnames(tables12) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s12, echo=FALSE}
+tables12 |>
+  kable(
+    format = "html"
+    , caption = "Table S12. Associated factors of cluster 2"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Save table-s12, eval=FALSE, include=FALSE}
+write_csv(tables12, "doc/tables12.csv")
+```
+
+```{r Associated factors of cluster 2+3, include=FALSE}
+tables13 <-
+  unicox_results_sum$`Cluster 2+3` |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables13 <-
+  tables13 |>
+  `colnames<-`(
+    colnames(tables13) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s13, echo=FALSE}
+tables13 |>
+  kable(
+    format = "html"
+    , caption = "Table S13. Associated factors of cluster 2+3"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Save table-s13, eval=FALSE, include=FALSE}
+write_csv(tables13, "doc/tables13.csv")
+```
+
+```{r Associated factors of cluster 3, include=FALSE}
+tables14 <-
+  unicox_results_sum$`Cluster 3` |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables14 <-
+  tables14 |>
+  `colnames<-`(
+    colnames(tables14) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s14, echo=FALSE}
+tables14 |>
+  kable(
+    format = "html"
+    , caption = "Table S14. Associated factors of cluster 3"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Save table-s14, eval=FALSE, include=FALSE}
+write_csv(tables14, "doc/tables14.csv")
+```
+
+```{r Associated factors of CI positive, include=FALSE}
+tables15 <-
+  unicox_results_sum$`CI positive` |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables15 <-
+  tables15 |>
+  `colnames<-`(
+    colnames(tables15) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s15, echo=FALSE}
+tables15 |>
+  kable(
+    format = "html"
+    , caption = "Table S15. Associated factors of CI positive"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Save table-s15, eval=FALSE, include=FALSE}
+write_csv(tables15, "doc/tables15.csv")
+```
+
+### KM plot and cluster characterization
+
+```{r KM plot of cluster 2+3 per exposure, include=FALSE}
+figures8 <-
+  data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+  mutate(
+    exposure =
+      case_when(exposure == 0 ~ "[2]", exposure == 1 ~ "[1]") |>
+      factor(c("[1]", "[2]"))
+  ) |>
+  univar_surv_plot(
+    "exposure"
+    , "PASC cluster 2+3"
+    , c(13.5, 13.5)
+    , c(0.25, 0.8)
+    , c(paste0(
+          "[2] Mild COVID-19 in\n"
+          , "     the past year"
+        )
+        , paste0(
+          "[1] Moderate-to-severe COVID-19 at any time\n"
+          , "     or mild COVID-19 within the past year"
+        )
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s8, echo=FALSE, fig.height=7, fig.width=11}
+figures8
+```
+
+Figure S8. KM plot of cluster 2+3 per exposure
+
+```{r Save figure-s8, eval=FALSE, include=FALSE}
+figures8
+ggsave("doc/figures8.eps", height = 7, width = 11)
+```
+
+```{r KM plot of cluster 2+3 per vaccine, include=FALSE}
+figures9 <-
+  data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+  mutate(
+    vaccine=
+      case_when(
+        vaccine == 0 ~ "[1]"
+        , vaccine == 1 ~ "[3]"
+        , vaccine == 2 ~ "[2]"
+      ) |>
+      factor(c("[1]", "[2]", "[3]"))
+  ) |>
+  univar_surv_plot(
+    "vaccine"
+    , "PASC cluster 2+3"
+    , c(5, 12, 13.5)
+    , c(0.075, 0.3, 0.875)
+    , c(paste0(
+          "[3] Received the first dose\n"
+          , "     of COVID-19 vaccine\n"
+          , "     after their COVID-19"
+        )
+        , paste0(
+           "[2] Received the first dose\n"
+           , "     of COVID-19 vaccine\n"
+           , "     before COVID infection"
+         )
+        , paste0(
+            "[1] Never received COVID-19\n"
+            , "     vaccination"
+          )
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s9, echo=FALSE, fig.height=7, fig.width=11}
+figures9
+```
+
+Figure S9. KM plot of cluster 2+3 per vaccine
+
+```{r Save figure-s9, eval=FALSE, include=FALSE}
+figures9
+ggsave("doc/figures9.eps", height = 7, width = 11)
+```
+
+```{r KM plot of CI positive per exposure, include=FALSE}
+figures10 <-
+  data_batch2_moca_ina_mv_data |>
+  mutate(
+    exposure =
+      case_when(exposure == 0 ~ "[2]", exposure == 1 ~ "[1]") |>
+      factor(c("[1]", "[2]"))
+  ) |>
+  univar_surv_plot(
+    "exposure"
+    , "Cognitive impairment"
+    , c(9.5, 13.5)
+    , c(0.075, 0.55)
+    , c("[2] Mild COVID-19 in the past year"
+        , paste0(
+          "[1] Moderate-to-severe COVID-19 at any time\n"
+          , "     or mild COVID-19 within the past year"
+        )
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s10, echo=FALSE, fig.height=7, fig.width=11}
+figures10
+```
+
+Figure S10. KM plot of CI positive per exposure
+
+```{r Save figure-s10, eval=FALSE, include=FALSE}
+figures10
+ggsave("doc/figure10.eps", height = 7, width = 11)
+```
+
+```{r KM plot of CI positive per vaccine, include=FALSE}
+figures11 <-
+  data_batch2_moca_ina_mv_data |>
+  mutate(
+    vaccine=
+      case_when(
+        vaccine == 0 ~ "[1]"
+        , vaccine == 1 ~ "[3]"
+        , vaccine == 2 ~ "[2]"
+      ) |>
+      factor(c("[1]","[2]","[3]"))
+  ) |>
+  univar_surv_plot(
+    "vaccine"
+    , "Cognitive impairment"
+    , c(1.5, 12.3, 12.3)
+    , c(0.05, 0, 0.43)
+    , c(paste0(
+          "[3] Received the first dose\n"
+          , "     of COVID-19 vaccine\n"
+          , "     after their COVID-19"
+        )
+        , paste0(
+           "[2] Received the first dose\n"
+           , "     of COVID-19 vaccine\n"
+           , "     before COVID infection"
+         )
+        , paste0(
+            "[1] Never received COVID-19\n"
+            , "     vaccination"
+          )
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s11, echo=FALSE, fig.height=7, fig.width=11}
+figures11
+```
+
+Figure S11. KM plot of CI positive per vaccine
+
+```{r Save figure-s11, eval=FALSE, include=FALSE}
+figures11
+ggsave("doc/figures11.eps", height = 7, width = 11)
+```
+
+```{r Cluster characteristics based on SBQ-LC domain, include=FALSE}
+figures12 <-
+  data_batch2_mv_data1 |>
+  mutate(seq = seq(nrow(data_batch2_mv_data1))) |>
+  gather(colname, new_score, -seq)
+
+figures12 <-
+  figures12 |>
+  rbind(
+    group_by(figures12, seq) |>
+      summarize(new_score = mean(is.na(new_score)) == 0) |>
+      mutate(colname = "complete") |>
+      select(colname, new_score, everything())
+  ) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname, new_score) |>
+  arrange(seq) |>
+  filter(complete == 1) |>
+  select(-complete) |>
+  column_to_rownames(var = "seq") |>
+  as.matrix()
+
+figures12 <- figures12 %*% data_batch1_pca$rotation[, "PC1", drop = FALSE]
+
+figures12 <-
+  as.data.frame(figures12) |>
+  rownames_to_column(var = "seq") |>
+  mutate(seq = as.numeric(seq)) |>
+  rename(sbq_lc_total = PC1) |>
+  right_join(
+    data_batch2 |>
+      mutate(seq = seq(nrow(data_batch2))) |>
+      select(seq)
+    , by = join_by(seq)
+  ) |>
+  mutate(
+    sbq_lc_class =
+      case_when(
+        sbq_lc_total > pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 1"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 1-2`
+          & sbq_lc_total > pc1_cl_intersections$`Cluster 2-3`
+          ~ "Cluster 2"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 2-3` ~ "Cluster 3"
+      ) |>
+      factor(c("Cluster 1", "Cluster 2", "Cluster 3"))
+  ) |>
+  left_join(
+    data_batch2_mv_data1[
+        , str_detect(colnames(data_batch2_mv_data1),"_score")
+      ] |>
+      mutate(seq = seq(nrow(data_batch2_mv_data1)))
+    , by = join_by(seq)
+  ) |>
+  arrange(seq) |>
+  select(-seq, -sbq_lc_total) |>
+  gather(scale, score, -sbq_lc_class) |>
+  group_by(sbq_lc_class, scale) |>
+  summarize(
+    avg = mean(score, na.rm=TRUE)
+    , lb =
+      mean(score, na.rm=TRUE) - qnorm(0.975) * sd(score, na.rm=TRUE) / sqrt(n())
+    , ub =
+      mean(score, na.rm=TRUE) + qnorm(0.975) * sd(score, na.rm=TRUE) / sqrt(n())
+    , .groups="drop"
+  ) |>
+  left_join(
+    rename(variable_label_type, scale = variable), by = join_by(scale)
+  ) |>
+  mutate(scale = str_remove_all(label, " score")) |>
+  mutate(scale = reorder(scale, avg)) |>
+  ggplot(aes(scale, avg)) +
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 0.1) +
+  geom_point() +
+  facet_wrap(~ sbq_lc_class, scale = "free_y", ncol = 1) +
+  coord_flip() +
+  xlab("") +
+  ylab("Average score (95% CI)")
+```
+
+```{r figure-s12, echo=FALSE, fig.height=7, fig.width=5}
+figures12
+```
+
+Figure S12. Cluster characteristics based on SBQ-LC domain
+
+```{r Save figure-s12, eval=FALSE, include=FALSE}
+figures12
+ggsave("doc/figures12.eps", height = 7, width = 5)
+```
+
+```{r CI characteristics based on MoCA-INA domain, include=FALSE}
+figures13 <-
+  data_batch2 |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          type == "Dependent variable, cognitive impairment of COVID-19"
+        ) |>
+        pull(variable)
+    )
+  ) |>
+  mutate(
+    moca_ina_class =
+      ifelse(
+        as.character(moca_ina_class) == "1", "CI positive", "CI negative"
+      ) |>
+      factor(c("CI negative", "CI positive"))
+  ) |>
+  select(-id, -moca_ina_total)
+
+figures13 <-
+  figures13 |>
+  mutate_at(
+    colnames(figures13)[colnames(figures13) != "moca_ina_class"], as.numeric
+  ) |>
+  gather(scale,score, -moca_ina_class) |>
+  group_by(moca_ina_class, scale) |>
+  summarize(
+    avg = mean(score, na.rm = TRUE)
+    , lb =
+      mean(score, na.rm = TRUE)
+      - qnorm(0.975) * sd(score, na.rm = TRUE) / sqrt(n())
+    , ub =
+      mean(score, na.rm = TRUE)
+      + qnorm(0.975) * sd(score, na.rm = TRUE) / sqrt(n())
+    , .groups = "drop"
+  ) |>
+  left_join(
+    rename(variable_label_type, scale = variable), by = join_by(scale)
+  ) |>
+  mutate(scale = str_remove_all(label, " score")) |>
+  mutate(scale = reorder(scale, avg)) |>
+  ggplot(aes(moca_ina_class, avg)) +
+  geom_errorbar(aes(ymin = lb, ymax = ub), width = 0.2, linewidth = 1) +
+  geom_point() +
+  facet_grid(scale ~ ., scale = "free_y", switch = "y") +
+  coord_flip() +
+  xlab("") +
+  ylab("Average score (95% CI)") +
+  theme(
+    strip.text.y.left = element_text(angle = 0)
+    , strip.placement = "outside"
+  )
+```
+
+```{r figure-s13, echo=FALSE, fig.height=5, fig.width=10}
+figures13
+```
+
+Figure S13. CI characteristics based on MoCA-INA domain
+
+```{r Save figure-s13, eval=FALSE, include=FALSE}
+figures13
+ggsave("doc/figures13.eps", height = 5, width = 10)
+```
+
+### Intervariate LR for determining confounders
+
+```{r Conduct intervariate LR, include=FALSE}
+interlr_results <-
+  list(
+    `Cluster 2+3`=
+      unicox_results_sum$`Cluster 2+3` |>
+      intervar_lr(data_batch2_sbq_lc_mv_data$`Cluster 2+3`)
+    , `CI positive`=
+        unicox_results_sum$`CI positive` |>
+        filter(variable!="sbq_lc_class") |>
+        intervar_lr(data_batch2_moca_ina_mv_data)
+  )
+```
+
+```{r Summarize intervariate LR results, include=FALSE}
+interlr_results_sum <-
+  interlr_results |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        select(variable_label_type, outcome = variable, outcome_label = label)
+        , by = join_by(outcome)
+      ) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  )
+```
+
+```{r Covariates of cluster 2+3, include=FALSE}
+tables16 <-
+  interlr_results_sum$`Cluster 2+3` |>
+  mutate(
+    outcome = outcome_label
+    , variable = label
+  ) |>
+  select(-outcome_label, -label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI,")")) |>
+  unite(OR, OR, CI, sep = " ")
+
+tables16 <-
+  tables16 |>
+  `colnames<-`(
+    colnames(tables16) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Or", "OR (95% CI)")
+  )
+```
+
+```{r table-s16, echo=FALSE}
+tables16 |>
+  kable(
+    format = "html"
+    , caption = "Table S16. Covariates of cluster 2+3"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s16, eval=FALSE, include=FALSE}
+write_csv(tables16, "doc/tables16.csv")
+```
+
+```{r Covariates of CI positive, include=FALSE}
+tables17 <-
+  interlr_results_sum$`CI positive` |>
+  mutate(outcome = outcome_label, variable = label) |>
+  select(-outcome_label, -label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI,")")) |>
+  unite(OR, OR, CI, sep = " ")
+
+tables17 <-
+  tables17 |>
+  `colnames<-`(
+    colnames(tables17) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Or", "OR (95% CI)")
+  )
+```
+
+```{r table-s17, echo=FALSE}
+tables17 |>
+  kable(
+    format = "html"
+    , caption = "Table S17. Covariates of CI positive"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s17, eval=FALSE, include=FALSE}
+write_csv(tables17, "doc/tables17.csv")
+```
+
+### Multivariate Cox-PH for determining causal factors
+
+```{r List of variables for multivariate Cox-PH, include=FALSE}
+# Empty list
+multicox_variables <- list()
+
+# Cluster 2+3 ~ exposure
+multicox_variables$`Cluster 2+3 ~ exposure`$data <-
+  data_batch2_sbq_lc_mv_data$`Cluster 2+3`
+multicox_variables$`Cluster 2+3 ~ exposure`$causal_factor <- "exposure"
+multicox_variables$`Cluster 2+3 ~ exposure`$covariates <-
+  interlr_results_sum$`Cluster 2+3` |>
+  filter(outcome == "exposure") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`Cluster 2+3 ~ exposure`$covariates <-
+  multicox_variables$`Cluster 2+3 ~ exposure`$covariates[
+    !multicox_variables$`Cluster 2+3 ~ exposure`$covariates
+     %in% c("vaccine", "other_sore_throat", "other_fever", "age_timestamp")
+  ]
+
+# Cluster 2+3 ~ vaccine
+multicox_variables$`Cluster 2+3 ~ vaccine`$data <-
+  data_batch2_sbq_lc_mv_data$`Cluster 2+3`
+multicox_variables$`Cluster 2+3 ~ vaccine`$causal_factor <- "vaccine"
+multicox_variables$`Cluster 2+3 ~ vaccine`$covariates <-
+  interlr_results_sum$`Cluster 2+3` |>
+  filter(outcome == "vaccine") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`Cluster 2+3 ~ vaccine`$covariates <-
+  multicox_variables$`Cluster 2+3 ~ vaccine`$covariates[
+    !multicox_variables$`Cluster 2+3 ~ vaccine`$covariates
+     %in% c("exposure")
+  ]
+
+# CI positive ~ exposure
+multicox_variables$`CI positive ~ exposure`$data <- data_batch2_moca_ina_mv_data
+multicox_variables$`CI positive ~ exposure`$causal_factor <- "exposure"
+multicox_variables$`CI positive ~ exposure`$covariates <-
+  interlr_results_sum$`CI positive` |>
+  filter(outcome == "exposure") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`CI positive ~ exposure`$covariates <-
+  multicox_variables$`CI positive ~ exposure`$covariates[
+    !multicox_variables$`CI positive ~ exposure`$covariates
+     %in% c("vaccine", "other_sore_throat", "age_timestamp")
+  ]
+
+# CI positive ~ vaccine
+multicox_variables$`CI positive ~ vaccine`$data <- data_batch2_moca_ina_mv_data
+multicox_variables$`CI positive ~ vaccine`$causal_factor <- "vaccine"
+multicox_variables$`CI positive ~ vaccine`$covariates <-
+  interlr_results_sum$`CI positive` |>
+  filter(outcome == "vaccine") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`CI positive ~ vaccine`$covariates <-
+  multicox_variables$`CI positive ~ vaccine`$covariates[
+    !multicox_variables$`CI positive ~ vaccine`$covariates
+     %in% c("exposure")
+  ]
+
+# CI positive ~ exposure + Cluster 2+3
+multicox_variables$`CI positive ~ exposure + Cluster 2+3`$data <-
+  data_batch2_moca_ina_mv_data |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate_at("outcome", as.factor) |>
+      select(id, sbq_lc_class = outcome)
+    , by = join_by(id)
+  )
+multicox_variables$`CI positive ~ exposure + Cluster 2+3`$causal_factor <-
+  "exposure"
+multicox_variables$`CI positive ~ exposure + Cluster 2+3`$covariates <-
+  c("sbq_lc_class", multicox_variables$`CI positive ~ exposure`$covariates)
+```
+
+```{r Conduct multivariate Cox-PH, include=FALSE}
+multicox_results <-
+  multicox_variables |>
+  imap(
+    ~ multicox_variables[[.y]]$data |>
+      multivar_coxph(
+        causal_factor =
+          multicox_variables[[.y]]$causal_factor
+        , covariates =
+          multicox_variables[[.y]]$covariates
+        , unicox_result_df =
+          unicox_results[[
+            str_remove_all(.y, " ~ exposure| ~ vaccine| \\+ Cluster 2\\+3")
+          ]]
+      )
+  )
+```
+
+```{r Summarize multivariate Cox-PH results, include=FALSE}
+multicox_results_sum <-
+  multicox_results |>
+  lapply(
+    \(x)
+    x$results |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |> 
+      select(type, everything()) |>
+      arrange(type)
+  )
+```
+
+```{r Exposure as causal factor of cluster 2+3 (prev. results), include=FALSE}
+tables18 <-
+  multicox_results_sum[1:4] |>
+  imap(~ mutate(.x, effect_cause = .y)) |>
+  c(multicox_results_sum[5] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause =
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (direct effect beyond SBQ-LC) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
+  reduce(rbind) |>
+  select(effect_cause, everything()) |>
+  separate(effect_cause, c("outcome", "cause"), sep = " ~ ") |>
+  select(-cause, -type) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables18 <-
+  tables18 |>
+  `colnames<-`(
+    colnames(tables18) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s18, echo=FALSE}
+tables18 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S18. Exposure as causal factor of cluster 2+3 (prev. results)"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s18, eval=FALSE, include=FALSE}
+write_csv(tables18, "doc/tables18.csv")
+```
+
+```{r Exposure as causal factor of cluster 2+3, include=FALSE}
+tables19 <-
+  multicox_results_sum[1:4] |>
+  imap(~ mutate(.x, effect_cause = .y)) |>
+  c(multicox_results_sum[5] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause=
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (direct effect beyond SBQ-LC) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
+  reduce(rbind) |>
+  ungroup() |>
+  mutate(
+    category =
+      case_when(
+        variable == "exposure" & term_reference == "1 vs. 0"
+        ~ paste0(
+            "Moderate-to-severe COVID-19 at any time or mild COVID-19 within "
+            , "the past year"
+          )
+        , variable == "vaccine" & term_reference == "1 vs. 0"
+          ~ "Received the first dose of COVID-19 vaccine after their COVID-19"
+        , variable == "vaccine" & term_reference == "2 vs. 0"
+          ~ "Received the first dose of COVID-19 vaccine before COVID infection"
+      )
+  ) |>
+  inner_join(
+    rbind(
+        data_batch2_sbq_lc_desc2_ver_outcome |>
+          mutate(effect_cause = paste0("Cluster 2+3 ~ ", variable))
+        , data_batch2_moca_ina_desc2_ver_outcome |>
+          mutate(effect_cause = paste0("CI positive ~ ", variable))
+      ) |>
+      filter(variable %in% c("exposure", "vaccine")) |>
+      # filter(
+      #   category != paste0(
+      #     "Received the first dose of COVID-19 vaccine before COVID infection"
+      #   )
+      # ) |>
+      rbind(
+        data_batch2_moca_ina_desc2_ver_outcome |>
+          filter(variable %in% c("exposure")) |>
+          mutate(
+            effect_cause =
+              paste0(
+                "CI positive (direct effect beyond SBQ-LC) ~ "
+                , "exposure + Cluster 2+3"
+              )
+          )
+      )
+    , by = join_by(variable, category, effect_cause)
+  ) |>
+  select(effect_cause, type, variable, category, n, p, everything()) |>
+  separate(effect_cause, c("outcome", "cause"), sep = " ~ ") |>
+  select(-cause, -type, -p_value) |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI,")")) |>
+  unite(`HR adj.`, HR, CI, sep = " ") |>
+  filter(
+    !(outcome == "CI positive (direct effect beyond SBQ-LC)"
+      & category == "Mild"
+    )
+  ) |>
+  left_join(
+    unicox_results[1:4] |>
+      lapply(
+        \(x)
+        x |>
+          group_by(variable) |>
+          filter(!(LB == "0.000" & UB == "Inf")) |>
+          # filter(sum(p_value != ">0.05") > 0) |>
+          # filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+          left_join(
+            variable_label_type |>
+              mutate(
+                type = factor(type, unique(type))
+                , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+              )
+            , by = join_by(variable)
+          ) |>
+          select(type, everything()) |>
+          arrange(type)
+      ) |>
+      imap(~ mutate(.x, outcome = .y)) |>
+      reduce(rbind) |>
+      ungroup() |>
+      filter(variable %in% c("exposure", "vaccine")) %>%
+      rbind(
+        filter(., outcome == "CI positive") |>
+          mutate(outcome = "CI positive (direct effect beyond SBQ-LC)")
+      ) |>
+      select(outcome, type, variable, everything()) |>
+      select(-type, -p_value) |>
+      mutate(variable = label) |>
+      select(-label) |>
+      unite(CI, LB, UB, sep = ", ") |>
+      mutate(CI = paste0("(", CI , ")")) |>
+      unite(`HR crude`, HR, CI, sep = " ")
+    , by = join_by(outcome, variable, term_reference)
+  ) |>
+  select(-term_reference) |>
+  select(outcome, variable, category, n, p, `HR crude`, everything()) |>
+  mutate(
+    category =
+      ifelse(
+        outcome == "CI positive (direct effect beyond SBQ-LC)"
+        , paste0(category, " (direct effect beyond SBQ-LC)"), category
+      )
+    , outcome =
+      ifelse(
+        outcome == "CI positive (direct effect beyond SBQ-LC)"
+        , "CI positive", outcome
+      )
+  ) |>
+  arrange(factor(outcome, unique(outcome)), factor(variable)) |>
+  mutate(
+    `HR crude`=
+      ifelse(
+        category
+        %in% c(
+          "Mild COVID-19 in the past year"
+          , "Never received COVID-19 vaccination"
+        )
+        , "ref.", `HR crude`
+      )
+    , `HR adj.`=
+      ifelse(
+        category
+        %in% c(
+          "Mild COVID-19 in the past year"
+          , "Never received COVID-19 vaccination"
+        )
+        , "ref.", `HR adj.`
+      )
+  ) |>
+  mutate(
+    category =
+      ifelse(duplicated(paste0(outcome, variable, category)), "", category)
+    , variable = ifelse(duplicated(paste0(outcome, variable)), "", variable)
+    , outcome = ifelse(duplicated(outcome), "", outcome)
+  )
+
+tables19 <-
+  tables19 |>
+  `colnames<-`(
+    colnames(tables19) |>
+      str_to_sentence() |>
+      str_replace_all("N", "Num. (N=210)") |>
+      str_replace_all("P", "% positive") |>
+      str_replace_all("Hr crude", "HR crude (95% CI)") |>
+      str_replace_all("Hr adj.", "HR adj. (95% CI)")
+  )
+```
+
+```{r table-s19, echo=FALSE}
+tables19 |>
+  kable(
+    format = "html"
+    , caption = "Table S19. Exposure as causal factor of cluster 2+3"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s19, eval=FALSE, include=FALSE}
+write_csv(tables19, "doc/tables19.csv")
+```
+
+# Estimate the prevalence
+
+```{r Process and extract data batch 1 & 2 for prevalence, include=FALSE}
+data_batch1_2_preval_data <-
+  data_batch1_2_preval_data1 |>
+  mutate(seq = seq(nrow(data_batch1_2_preval_data1))) |>
+  gather(colname, new_score, -seq)
+
+data_batch1_2_preval_data <-
+  data_batch1_2_preval_data |>
+  rbind(
+    group_by(data_batch1_2_preval_data, seq) |>
+      summarize(new_score = mean(is.na(new_score)) == 0) |>
+      mutate(colname = "complete") |>
+      select(colname, new_score, everything())
+  ) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname, new_score) |>
+  arrange(seq) |>
+  filter(complete == 1) |>
+  select(-complete) |>
+  column_to_rownames(var = "seq") |>
+  as.matrix()
+
+data_batch1_2_preval_data <-
+  data_batch1_2_preval_data %*% data_batch1_pca$rotation[, "PC1", drop = FALSE]
+
+data_batch1_2_preval_data <-
+  as.data.frame(data_batch1_2_preval_data) |>
+  rownames_to_column(var = "seq") |>
+  mutate(seq = as.numeric(seq)) |>
+  rename(sbq_lc_total = PC1) |>
+  right_join(
+    data_batch1_2 |>
+      mutate(seq = seq(nrow(data_batch1_2))) |>
+      select(seq)
+    , by = join_by(seq)
+  ) |>
+  mutate(
+    sbq_lc_class =
+      case_when(
+        sbq_lc_total > pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 1"
+        ,sbq_lc_total <= pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 2+3"
+      ) |>
+      factor(c("Cluster 1", "Cluster 2+3"))
+  ) |>
+  left_join(
+    data_batch1_2 |>
+      mutate(
+        moca_ina_class =
+          ifelse(
+            as.character(moca_ina_class) == "1", "CI positive", "CI negative"
+          ) |>
+          factor(c("CI negative", "CI positive"))
+      ) |>
+      select(id, moca_ina_total, moca_ina_class) |>
+      mutate(seq = seq(nrow(data_batch1_2)))
+    , by = join_by(seq)
+  ) |>
+  arrange(seq) |>
+  select(-seq) |>
+  select(id, everything())
+```
+
+```{r Bootstrap to estimate interval estimate of prevalence, include=FALSE}
+preval_boot <- list()
+
+for(i in seq(1000)){
+  set.seed(seed + i)
+  
+  preval_boot[[i]] <-
+    data_batch1_2_preval_data |>
+    slice(
+      sample(
+        seq(nrow(data_batch1_2_preval_data))
+        , nrow(data_batch1_2_preval_data)
+        , replace = TRUE
+      )
+    ) |>
+    group_by(sbq_lc_class, moca_ina_class) |>
+    summarize(n = n(), .groups = "drop") |>
+    mutate(total = sum(n))
+  
+  preval_boot[[i]] <-
+    preval_boot[[i]] |>
+    rbind(
+      mutate(preval_boot[[i]], sbq_lc_class = "Cluster 1+2+3") |>
+        group_by(sbq_lc_class, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+  
+  preval_boot[[i]] <-
+    preval_boot[[i]] |>
+    rbind(
+      mutate(preval_boot[[i]], moca_ina_class = "CI total") |>
+        group_by(sbq_lc_class, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+}
+
+rm(i)
+```
+
+```{r Prevalence of LC and CI, include=FALSE}
+tables20 <-
+  data_batch1_2_preval_data |>
+  group_by(sbq_lc_class, moca_ina_class) |>
+  summarize(n=n(), .groups = "drop") |>
+  mutate(total = sum(n))
+
+tables20 <-
+  tables20 |>
+  rbind(
+    mutate(tables20, sbq_lc_class = "Cluster 1+2+3") |>
+      group_by(sbq_lc_class, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  )
+
+tables20 <-
+  tables20 |>
+  rbind(
+    mutate(tables20, moca_ina_class = "CI total") |>
+      group_by(sbq_lc_class, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  ) |>
+  mutate(p = n / total) |>
+  left_join(
+    preval_boot |>
+      reduce(rbind) |>
+      mutate(p = n / total) |>
+      group_by(sbq_lc_class, moca_ina_class) |>
+      summarize(
+        std = sd(p)
+        , avg = mean(p)
+        , lb = avg - qnorm(0.975) * std / sqrt(n())
+        , ub = avg + qnorm(0.975) * std / sqrt(n())
+        , .groups = "drop"
+      )
+    , by = join_by(sbq_lc_class, moca_ina_class)
+  ) |>
+  mutate(p = avg) |>
+  select(-avg, -std) |>
+  mutate_at(c("p", "lb", "ub"), \(x) round(x * 100, 2)) |>
+  unite(n_total, n, total, sep = "/") |>
+  mutate(n_total = paste0("(", n_total, ";")) |>
+  unite(ci, lb, ub, sep = ", ") |>
+  mutate(ci = paste0(ci, ")")) |>
+  unite(n_total_ci, n_total, ci, sep = " ") |>
+  unite(p, p, n_total_ci, sep = " ") |>
+  spread(moca_ina_class, p, fill = "0.00 (0.00, 0.00)")
+
+tables20 <-
+  tables20 |>
+  `colnames<-`(
+    colnames(tables20) |>
+      str_replace_all("sbq_lc_class", "") 
+  )
+```
+
+```{r table-20, echo=FALSE}
+tables20 |>
+  kable(
+    format = "html"
+    , caption = "Table S20. Prevalence of LC and CI"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-20, eval=FALSE, include=FALSE}
+write_csv(tables20, "doc/tables20.csv")
+```
+
+```{r Bootstrap to estimate prevalence in batch 2, include=FALSE}
+preval_boot_batch2 <- list()
+
+for(i in seq(1000)){
+  set.seed(seed + i)
+  
+  preval_boot_batch2[[i]] <-
+    data_batch1_2_preval_data |>
+    filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id)
+  
+  preval_boot_batch2[[i]] <-
+    preval_boot_batch2[[i]] |>
+    slice(
+      sample(
+        seq(nrow(preval_boot_batch2[[i]]))
+        , nrow(preval_boot_batch2[[i]])
+        , replace = TRUE
+      )
+    ) |>
+    group_by(sbq_lc_class, moca_ina_class) |>
+    summarize(n = n(), .groups = "drop") |>
+    mutate(total = sum(n))
+  
+  preval_boot_batch2[[i]] <-
+    preval_boot_batch2[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2[[i]], sbq_lc_class = "Cluster 1+2+3") |>
+        group_by(sbq_lc_class, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+  
+  preval_boot_batch2[[i]] <-
+    preval_boot_batch2[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2[[i]], moca_ina_class = "CI total") |>
+        group_by(sbq_lc_class, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+}
+
+rm(i)
+```
+
+```{r Prevalence of LC and CI in batch 2, include=FALSE}
+tables21 <-
+  data_batch1_2_preval_data |>
+  filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
+  group_by(sbq_lc_class, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
+  mutate(total = sum(n))
+
+tables21 <-
+  tables21 |>
+  rbind(
+    mutate(tables21, sbq_lc_class = "Cluster 1+2+3") |>
+      group_by(sbq_lc_class, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  )
+
+tables21 <-
+  tables21 |>
+  rbind(
+    mutate(tables21, moca_ina_class = "CI total") |>
+      group_by(sbq_lc_class, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  ) |>
+  mutate(p = n / total) |>
+  left_join(
+    preval_boot_batch2 |>
+      reduce(rbind) |>
+      mutate(p = n / total) |>
+      group_by(sbq_lc_class, moca_ina_class) |>
+      summarize(
+        std = sd(p)
+        , avg = mean(p)
+        , lb = avg - qnorm(0.975) * std / sqrt(n())
+        , ub = avg + qnorm(0.975) * std / sqrt(n())
+        , .groups = "drop"
+      )
+    , by = join_by(sbq_lc_class, moca_ina_class)
+  ) |>
+  mutate(p = avg) |>
+  select(-avg, -std) |>
+  mutate_at(c("p", "lb", "ub"), \(x) round(x * 100, 2)) |>
+  unite(n_total, n, total, sep = "/") |>
+  mutate(n_total = paste0("(", n_total, ";")) |>
+  unite(ci, lb, ub, sep = ", ") |>
+  mutate(ci = paste0(ci, ")")) |>
+  unite(n_total_ci, n_total, ci, sep = " ") |>
+  unite(p, p, n_total_ci, sep = " ") |>
+  spread(moca_ina_class, p, fill = "0.00 (0.00, 0.00)")
+
+tables21 <-
+  tables21 |>
+  `colnames<-`(
+    colnames(tables21) |>
+      str_replace_all("sbq_lc_class", "") 
+  )
+```
+
+```{r table-s21, echo=FALSE}
+tables21 |>
+  kable(
+    format = "html"
+    , caption = "Table S21. Prevalence of LC and CI in batch 2"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s21, eval=FALSE, include=FALSE}
+write_csv(tables21,"doc/tables21.csv")
+```
+
+```{r Add other primary variables, include=FALSE}
+data_batch1_2_preval_data_plus <-
+  data_batch1_2_preval_data |>
+  filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
+  left_join(
+    data_batch2_moca_ina_mv_data |>
+      select(id, exposure, vaccine)
+    , by = join_by(id)
+  )
+```
+
+```{r Bootstrap to estimate prevalence in batch 2 x infection, include=FALSE}
+preval_boot_batch2_infection <- list()
+
+for(i in seq(1000)){
+  set.seed(seed + i)
+  
+  preval_boot_batch2_infection[[i]] <-
+    data_batch1_2_preval_data_plus |>
+    slice(
+      sample(
+        seq(nrow(data_batch1_2_preval_data_plus))
+        , nrow(data_batch1_2_preval_data_plus)
+        , replace = TRUE
+      )
+    ) |>
+    group_by(exposure, moca_ina_class) |>
+    summarize(n = n(), .groups = "drop") |>
+    mutate(total = sum(n))
+  
+  preval_boot_batch2_infection[[i]] <-
+    preval_boot_batch2_infection[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2_infection[[i]], exposure = "All") |>
+        group_by(exposure, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+  
+  preval_boot_batch2_infection[[i]] <-
+    preval_boot_batch2_infection[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2_infection[[i]], moca_ina_class = "CI total") |>
+        group_by(exposure, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+}
+
+rm(i)
+```
+
+```{r Prevalence of infection and CI in batch 2, include=FALSE}
+tables22 <-
+  data_batch1_2_preval_data_plus |>
+  group_by(exposure, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
+  mutate(total = sum(n))
+
+tables22 <-
+  tables22 |>
+  rbind(
+    mutate(tables22, exposure = "All") |>
+      group_by(exposure, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  )
+
+tables22 <-
+  tables22 |>
+  rbind(
+    mutate(tables22, moca_ina_class = "CI total") |>
+      group_by(exposure, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  ) |>
+  mutate(p = n / total) |>
+  left_join(
+    preval_boot_batch2_infection |>
+      reduce(rbind) |>
+      mutate(p = n / total) |>
+      group_by(exposure, moca_ina_class) |>
+      summarize(
+        std = sd(p)
+        , avg = mean(p)
+        , lb = avg - qnorm(0.975) * std / sqrt(n())
+        , ub = avg + qnorm(0.975) * std / sqrt(n())
+        , .groups = "drop"
+      )
+    , by = join_by(exposure, moca_ina_class)
+  ) |>
+  mutate(p = avg) |>
+  select(-avg, -std) |>
+  mutate_at(c("p", "lb", "ub"), \(x) round(x * 100, 2)) |>
+  unite(n_total, n, total, sep = "/") |>
+  mutate(n_total = paste0("(", n_total, ";")) |>
+  unite(ci, lb, ub, sep = ", ") |>
+  mutate(ci = paste0(ci, ")")) |>
+  unite(n_total_ci, n_total, ci, sep = " ") |>
+  unite(p, p, n_total_ci, sep = " ") |>
+  spread(moca_ina_class, p, fill = "0.00 (0.00, 0.00)")
+
+tables22 <-
+  tables22 |>
+  `colnames<-`(
+    colnames(tables22) |>
+      str_replace_all("exposure", "") 
+  )
+```
+
+```{r table-s22, echo=FALSE}
+tables22 |>
+  kable(
+    format = "html"
+    , caption = "Table S22. Prevalence of infection and CI in batch 2"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s22, eval=FALSE, include=FALSE}
+write_csv(tables22, "doc/tables22.csv")
+```
+
+```{r Bootstrap to estimate prevalence in batch 2 x vaccine, include=FALSE}
+preval_boot_batch2_vaccine <- list()
+
+for(i in seq(1000)){
+  set.seed(seed + i)
+  
+  preval_boot_batch2_vaccine[[i]] <-
+    data_batch1_2_preval_data_plus |>
+    slice(
+      sample(
+        seq(nrow(data_batch1_2_preval_data_plus))
+        , nrow(data_batch1_2_preval_data_plus)
+        , replace = TRUE
+      )
+    ) |>
+    group_by(vaccine, moca_ina_class) |>
+    summarize(n = n(), .groups = "drop") |>
+    mutate(total = sum(n))
+  
+  preval_boot_batch2_vaccine[[i]] <-
+    preval_boot_batch2_vaccine[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2_vaccine[[i]], vaccine = "All") |>
+        group_by(vaccine, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+  
+  preval_boot_batch2_vaccine[[i]] <-
+    preval_boot_batch2_vaccine[[i]] |>
+    rbind(
+      mutate(preval_boot_batch2_vaccine[[i]], moca_ina_class = "CI total") |>
+        group_by(vaccine, moca_ina_class, total) |>
+        summarize(n = sum(n), .groups = "drop")
+    )
+}
+
+rm(i)
+```
+
+```{r Prevalence of vaccine and CI in batch 2, include=FALSE}
+tables23 <-
+  data_batch1_2_preval_data_plus |>
+  group_by(vaccine, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
+  mutate(total = sum(n))
+
+tables23 <-
+  tables23 |>
+  rbind(
+    mutate(tables23, vaccine = "All") |>
+      group_by(vaccine, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  )
+
+tables23 <-
+  tables23 |>
+  rbind(
+    mutate(tables23, moca_ina_class = "CI total") |>
+      group_by(vaccine, moca_ina_class, total) |>
+      summarize(n = sum(n), .groups = "drop")
+  ) |>
+  mutate(p = n / total) |>
+  left_join(
+    preval_boot_batch2_vaccine |>
+      reduce(rbind) |>
+      mutate(p = n / total) |>
+      group_by(vaccine, moca_ina_class) |>
+      summarize(
+        std = sd(p)
+        , avg = mean(p)
+        , lb = avg - qnorm(0.975) * std / sqrt(n())
+        , ub = avg + qnorm(0.975) * std / sqrt(n())
+        , .groups = "drop"
+      )
+    , by = join_by(vaccine, moca_ina_class)
+  ) |>
+  mutate(p = avg) |>
+  select(-avg, -std) |>
+  mutate_at(c("p", "lb", "ub"), \(x) round(x * 100, 2)) |>
+  unite(n_total, n, total, sep = "/") |>
+  mutate(n_total = paste0("(", n_total, ";")) |>
+  unite(ci, lb, ub, sep = ", ") |>
+  mutate(ci = paste0(ci, ")")) |>
+  unite(n_total_ci, n_total, ci, sep = " ") |>
+  unite(p, p, n_total_ci, sep = " ") |>
+  spread(moca_ina_class, p, fill = "0.00 (0.00, 0.00)")
+
+tables23 <-
+  tables23 |>
+  `colnames<-`(
+    colnames(tables23) |>
+      str_replace_all("vaccine", "") 
+  )
+```
+
+```{r table-s23, echo=FALSE}
+tables23 |>
+  kable(
+    format = "html"
+    , caption = "Table S23. Prevalence of vaccine and CI in batch 2"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s23, eval=FALSE, include=FALSE}
+write_csv(tables23, "doc/tables23.csv")
+```
+
+# Additional analysis
+
+```{r Conduct univariate Cox-PH of cluster x exposure among mild, include=FALSE}
+tables24 <-
+  data_batch2_sbq_lc_mv_data |>
+  lapply(\(x) select_at(x, colnames(x)[!colnames(x) %in% mea_err_var])) |>
+  lapply(filter, id %in% filter(data_batch1_2, severity == "Mild")$id) |>
+  lapply(select, id, interview_onset, batch, outcome, exposure) |>
+  lapply(univar_coxph) |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything())
+
+tables24 <-
+  tables24 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables24 <-
+  tables24 |>
+  `colnames<-`(
+    colnames(tables24) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s24, echo=FALSE}
+tables24 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S24. Conduct univariate Cox-PH of cluster x exposure among mild"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s24, eval=FALSE, include=FALSE}
+write_csv(tables24, "doc/tables24.csv")
+```
+
+```{r Conduct univariate Cox-PH of cluster x modsev vs control, include=FALSE}
+tables25 <-
+  data_batch2_sbq_lc_mv_data |>
+  lapply(\(x) select_at(x, colnames(x)[!colnames(x) %in% mea_err_var])) |>
+  lapply(
+    filter
+    , !(exposure == 1
+        & id %in% filter(data_batch1_2, severity == "Mild")$id
+      )
+  ) |>
+  lapply(select, id, interview_onset, batch, outcome, exposure) |>
+  lapply(univar_coxph) |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything())
+
+tables25 <-
+  tables25 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables25 <-
+  tables25 |>
+  `colnames<-`(
+    colnames(tables25) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s25, echo=FALSE}
+tables25 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S25. Conduct univariate Cox-PH of cluster x modsev vs control"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s25, eval=FALSE, include=FALSE}
+write_csv(tables25, "doc/tables25.csv")
+```
+
+```{r Conduct univariate Cox-PH of cluster x ms vs m among exp 1, include=FALSE}
+tables26 <-
+  data_batch2_sbq_lc_mv_data |>
+  lapply(\(x) select_at(x, colnames(x)[!colnames(x) %in% mea_err_var])) |>
+  lapply(filter, exposure == 1) |>
+  lapply(
+    mutate
+    , exposure = 
+      as.integer(!id %in% filter(data_batch1_2, severity == "Mild")$id)
+  ) |>
+  lapply(select, id, interview_onset, batch, outcome, exposure) |>
+  lapply(univar_coxph) |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      # filter(sum(p_value != ">0.05") > 0) |>
+      # filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything()) |>
+  filter(outcome == "Cluster 2+3")
+
+tables26 <-
+  tables26 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables26 <-
+  tables26 |>
+  `colnames<-`(
+    colnames(tables26) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r Write table-s26, echo=FALSE}
+tables26 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S26. Conduct univariate Cox-PH of cluster x ms vs m among exp 1"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r table-s26, eval=FALSE, include=FALSE}
+write_csv(tables26, "doc/tables26.csv")
+```
+
+```{r KM plot of cluster 2+3 per exposure separated severity, include=FALSE}
+figures14 <-
+  data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      )
+    , exposure =
+      case_when(
+        exposure == 0 ~ "[3]", exposure == 1 ~ "[1]", exposure == 2 ~ "[2]"
+      ) |>
+      factor(c("[1]", "[2]", "[3]"))
+  ) |>
+  univar_surv_plot(
+    "exposure"
+    , "PASC cluster 2+3"
+    , c(13.4, 21, 13.4 )
+    , c(0.25, 0.2, 0.9)
+    , c(paste0(
+          "[3] Mild COVID-19 in\n"
+          , "the past year"
+        )
+        , paste0(
+            "[2] Moderate-to-severe\n"
+            , "     COVID-19 at any time"
+          )
+        , "[1] Mild COVID-19 within the past year"
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s14, echo=FALSE, fig.height=7, fig.width=11}
+figures14
+```
+
+Figure S14. KM plot of cluster 2+3 per exposure separated severity
+
+```{r Save figure-s14, eval=FALSE, include=FALSE}
+figures14
+ggsave("doc/figures14.eps", height = 7, width = 11)
+```
+
+```{r Conduct univariate Cox-PH of CI x exposure among mild, include=FALSE}
+tables27 <-
+  data_batch2_moca_ina_mv_data |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate_at("outcome", as.factor) |>
+      select(id, sbq_lc_class = outcome)
+    , by = join_by(id)
+  )
+
+tables27 <-
+  tables27 |>
+  select_at(
+    colnames(tables27)[
+      !colnames(tables27) %in% mea_err_var[-4]
+    ]
+  )
+
+tables27 <-
+  list(`CI positive` = tables27) |>
+  lapply(filter, id %in% filter(data_batch1_2, severity == "Mild")$id) |>
+  lapply(
+    select, id, interview_onset, batch, outcome, exposure, interviewer_moca_ina
+  ) |>
+  lapply(univar_coxph, covariates = "interviewer_moca_ina") |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything())
+
+tables27 <-
+  tables27 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables27 <-
+  tables27 |>
+  `colnames<-`(
+    colnames(tables27) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s27, echo=FALSE}
+tables27 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S27. Conduct univariate Cox-PH of CI x exposure among mild"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s27, eval=FALSE, include=FALSE}
+write_csv(tables27, "doc/tables27.csv")
+```
+
+```{r Conduct univariate Cox-PH of CI x modsev vs control, include=FALSE}
+tables28 <-
+  data_batch2_moca_ina_mv_data |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate_at("outcome", as.factor) |>
+      select(id, sbq_lc_class = outcome)
+    , by = join_by(id)
+  )
+
+tables28 <-
+  tables28 |>
+  select_at(
+    colnames(tables28)[
+      !colnames(tables28) %in% mea_err_var[-4]
+    ]
+  )
+
+tables28 <-
+  list(`CI positive` = tables28) |>
+  lapply(
+    filter
+    , !(exposure == 1
+        & id %in% filter(data_batch1_2, severity == "Mild")$id
+      )
+  ) |>
+  lapply(
+    select, id, interview_onset, batch, outcome, exposure, interviewer_moca_ina
+  ) |>
+  lapply(univar_coxph, covariates = "interviewer_moca_ina") |>
+  lapply(filter, variable != "interviewer_moca_ina") |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      filter(sum(p_value != ">0.05") > 0) |>
+      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything())
+
+tables28 <-
+  tables28 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables28 <-
+  tables28 |>
+  `colnames<-`(
+    colnames(tables28) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s28, echo=FALSE}
+tables28 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S28. Conduct univariate Cox-PH of CI x modsev vs control"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s28, eval=FALSE, include=FALSE}
+write_csv(tables28, "doc/tables28.csv")
+```
+
+```{r Conduct univariate Cox-PH of CI x ms vs m among exp 1, include=FALSE}
+tables29 <-
+  data_batch2_moca_ina_mv_data |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate_at("outcome", as.factor) |>
+      select(id, sbq_lc_class = outcome)
+    , by = join_by(id)
+  )
+
+tables29 <-
+  tables29 |>
+  select_at(
+    colnames(tables29)[
+      !colnames(tables29) %in% mea_err_var[-4]
+    ]
+  )
+
+tables29 <-
+  list(`CI positive` = tables29) |>
+  lapply(filter, exposure == 1) |>
+  lapply(
+    mutate
+    , exposure = 
+      as.integer(!id %in% filter(data_batch1_2, severity == "Mild")$id)
+  ) |>
+  lapply(
+    select, id, interview_onset, batch, outcome, exposure, interviewer_moca_ina
+  ) |>
+  lapply(univar_coxph, covariates = "interviewer_moca_ina") |>
+  lapply(filter, variable != "interviewer_moca_ina") |>
+  lapply(
+    \(x)
+    x |>
+      group_by(variable) |>
+      filter(!(LB == "0.000" & UB == "Inf")) |>
+      # filter(sum(p_value != ">0.05") > 0) |>
+      # filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      left_join(
+        variable_label_type |>
+          mutate(
+            type = factor(type, unique(type))
+            , type = factor(type, levels(type)[c(2,3,4,1,5,6)])
+          )
+        , by = join_by(variable)
+      ) |>
+      select(type, everything()) |>
+      arrange(type)
+  ) |>
+  imap(~ mutate(.x, outcome = .y)) |>
+  reduce(rbind) |>
+  select(outcome, everything())
+
+tables29 <-
+  tables29 |>
+  mutate(variable = label) |>
+  select(-label) |>
+  unite(CI, LB, UB, sep = ", ") |>
+  mutate(CI = paste0("(", CI, ")")) |>
+  unite(HR, HR, CI, sep = " ")
+
+tables29 <-
+  tables29 |>
+  `colnames<-`(
+    colnames(tables29) |>
+      str_replace_all("term_reference", "") |>
+      str_to_sentence() |>
+      str_replace_all("P_value", "p-value") |>
+      str_replace_all("Hr", "HR (95% CI)")
+  )
+```
+
+```{r table-s29, echo=FALSE}
+tables29 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S29. Conduct univariate Cox-PH of CI x ms vs m among exp 1"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s29, eval=FALSE, include=FALSE}
+write_csv(tables29, "doc/tables29.csv")
+```
+
+```{r KM plot of CI per exposure separated severity, include=FALSE}
+figures15 <-
+  data_batch2_moca_ina_mv_data |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      )
+    , exposure =
+      case_when(
+        exposure == 0 ~ "[3]", exposure == 1 ~ "[1]", exposure == 2 ~ "[2]"
+      ) |>
+      factor(c("[1]", "[2]", "[3]"))
+  ) |>
+  univar_surv_plot(
+    "exposure"
+    , "Cognitive impairment"
+    , c(12.4, 12.4, 12.4)
+    , c(0, 0.3, 0.85)
+    , c(paste0(
+          "[3] Mild COVID-19 in\n"
+          , "     the past year"
+        )
+        , paste0(
+            "[2] Moderate-to-severe\n"
+            , "     COVID-19 at any time"
+          )
+        , paste0(
+            "[1] Mild COVID-19\n"
+            , "     within the past year"
+          )
+      )
+    , modified_data = FALSE
+  )
+```
+
+```{r figure-s15, echo=FALSE, fig.height=7, fig.width=11}
+figures15
+```
+
+Figure S15. KM plot of CI per exposure separated severity
+
+```{r Save figure-s15, eval=FALSE, include=FALSE}
+figures15
+ggsave("doc/figures15.eps", height = 7, width = 11)
+```
+
+```{r Age-CI linearity, include=FALSE}
+figures16 <-
+  data_batch2_moca_ina_mv_data |>
+  mutate_at(
+    c("age_timestamp", "age_inf_date")
+    , \(x)
+      case_when(
+          floor(x) <= 19 ~ "17-20"
+          , floor(x) >= 20 & floor(x) <= 29 ~ "20-29"
+          , floor(x) >= 30 & floor(x) <= 39 ~ "30-39"
+          , floor(x) >= 40 & floor(x) <= 49 ~ "40-49"
+          , floor(x) >= 50 & floor(x) <= 59 ~ "50-59"
+          , floor(x) >= 60 & floor(x) <= 69 ~ "60-69"
+          , floor(x) >= 70 & floor(x) <= 79 ~ "70-79"
+          , floor(x) >= 80 & floor(x) <= 89 ~ "80-89"
+          , floor(x) >= 90 ~ "90+"
+        ) |>
+        factor(
+          c("17-20", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79",
+            "80-89", "90+"
+          )
+        )
+  ) |>
+  group_by(age_inf_date) |>
+  summarize(p = mean(outcome)) |>
+  mutate(age_inf_date_num = as.numeric(age_inf_date))
+
+figures16_smooth_fit <-
+  lm(p ~ age_inf_date_num, data = figures16) |>
+  tidy() |>
+  mutate(lb = estimate - std.error, ub = estimate + std.error) |>
+  select(term, estimate) |>
+  mutate_at("estimate", round, 3) |>
+  pull(estimate) |>
+  paste0(collapse = " + ") |>
+  paste0("x")
+
+figures16 <-
+  figures16 |>
+  ggplot(aes(age_inf_date_num, p)) +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_point() +
+  annotate("label", 3, 0.8, label = figures16_smooth_fit, size = 4) +
+  scale_x_continuous(
+    "Age group"
+    , breaks = seq(length(unique(figures16$age_inf_date)))
+    , labels = as.character(sort(unique(figures16$age_inf_date)))
+  ) +
+  ylab("Proportion of PCCI")
+```
+
+```{r figure-s16, echo=FALSE, fig.height=5, fig.width=7}
+figures16
+```
+
+```{r Save figure-s16, eval=FALSE, include=FALSE}
+figures16
+ggsave("doc/figures16.eps", height = 5, width = 7, units = "in")
+```
+
+```{r Summary of CI and LC, include=FALSE}
+tables30 <-
+  data_batch2_moca_ina_mv_data |>
+  select(id, ci = outcome) |>
+  left_join(
+    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+      mutate(outcome = as.integer(outcome == 0)) |>
+      select(id, lc = outcome)
+    , by = join_by(id)
+  ) |>
+  group_by(ci, lc) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(lc) |>
+  mutate(subtotal = sum(n)) |>
+  ungroup() |>
+  mutate(p = n / subtotal)
+```
+
+```{r table-s30, echo=FALSE}
+tables30 |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S30. Summary of CI and LC"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
+
+```{r Write table-s30, eval=FALSE, include=FALSE}
+write_csv(tables30, "doc/tables30.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
