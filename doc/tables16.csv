@@ -1,0 +1,14 @@
+Type,Outcome,Variable,,OR (95% CI),p-value
+Independent variable,COVID-19,COVID-19 vaccination,1 vs. 0,"0.114 (0.029, 0.452)",0.002
+Independent variable,COVID-19,COVID-19 vaccination,2 vs. 0,"0.147 (0.049, 0.441)",<0.001
+Independent variable,COVID-19 vaccination,COVID-19,1 vs. 0,"0.142 (0.048, 0.423)",<0.001
+Memory-dependent covariate,COVID-19,Age at COVID-19 diagnosis (year),,"1.039 (1.018, 1.061)",<0.001
+Memory-dependent covariate,COVID-19,Fever at COVID-19 diagnosis,1 vs. 0,"0.473 (0.250, 0.896)",0.022
+Memory-dependent covariate,COVID-19,Loss of smell at COVID-19 diagnosis,1 vs. 0,"0.371 (0.195, 0.708)",0.003
+Memory-dependent covariate,COVID-19,Sore throat at COVID-19 diagnosis,1 vs. 0,"0.481 (0.243, 0.951)",0.035
+Memory-independent covariate,COVID-19,Age at data collection (year),,"1.037 (1.015, 1.059)",<0.001
+Memory-independent covariate,COVID-19,Marital status,Divorced vs. Unmarried,"16.000 (1.537, 166.533)",0.020
+Memory-independent covariate,COVID-19,Occupational status,Public servant vs. Unemployed,"0.135 (0.048, 0.376)",<0.001
+Memory-independent covariate,COVID-19,Occupational status,Self-employee vs. Unemployed,"0.276 (0.094, 0.808)",0.019
+Memory-independent covariate,COVID-19,Occupational status,Other occupation vs. Unemployed,"0.110 (0.029, 0.415)",0.001
+Memory-independent covariate,COVID-19 vaccination,Occupational status,Public servant vs. Unemployed,"12.105 (1.482, 98.858)",0.020

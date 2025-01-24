@@ -1,0 +1,9 @@
+Type,Variable,,HR (95% CI),p-value
+Memory-dependent covariate,Cardiovascular diseases at COVID-19 diagnosis,1 vs. 0,"4.320 (1.103, 16.909)",0.034
+Memory-dependent covariate,Depression at COVID-19 diagnosis,1 vs. 0,"9.502 (2.305, 39.175)",<0.001
+Memory-dependent covariate,Body ache at COVID-19 diagnosis,1 vs. 0,"9.453 (1.209, 73.894)",0.034
+Memory-dependent covariate,Dyspnea at COVID-19 diagnosis,1 vs. 0,"3.443 (1.002, 11.831)",0.048
+Memory-dependent covariate,Nausea/vomiting at COVID-19 diagnosis,1 vs. 0,"7.097 (1.877, 26.836)",0.003
+Memory-independent covariate,Area,Rural vs. Urban,"0.270 (0.082, 0.886)",0.034
+Memory-independent covariate,Educational status,Never school vs. College,"15.690 (3.210, 76.686)",<0.001
+Memory-independent covariate,Body height (cm),,"0.801 (0.709, 0.903)",<0.001

@@ -1,0 +1,13 @@
+Type,Variable,,HR (95% CI),p-value
+Memory-dependent covariate,Age at COVID-19 diagnosis (year),,"0.971 (0.949, 0.992)",0.009
+Memory-dependent covariate,Chronic obstructive pulmonary disease at COVID-19 diagnosis,1 vs. 0,"3.748 (1.828, 7.685)",<0.001
+Memory-dependent covariate,Other comorbidities at COVID-19 diagnosis,1 vs. 0,"2.180 (1.033, 4.600)",0.044
+Memory-dependent covariate,Diarrhea at COVID-19 diagnosis,1 vs. 0,"2.601 (1.271, 5.324)",0.017
+Memory-dependent covariate,Sore throat at COVID-19 diagnosis,1 vs. 0,"2.485 (1.340, 4.609)",0.004
+Memory-independent covariate,City/regency,Kulon Progo vs. Yogyakarta,"9.084 (2.142, 38.530)",0.002
+Memory-independent covariate,Age at data collection (year),,"0.968 (0.947, 0.990)",0.006
+Memory-independent covariate,Sex,Female vs. Male,"2.095 (1.050, 4.179)",0.028
+Memory-independent covariate,Marital status,Married vs. Unmarried,"0.432 (0.222, 0.840)",0.014
+Memory-independent covariate,Occupational status,Student vs. Unemployed,"4.757 (1.220, 18.545)",0.017
+Memory-independent covariate,Occupational status,Other occupation vs. Unemployed,"2.635 (1.015, 6.840)",0.036
+Memory-independent covariate,Body height (cm),,"0.964 (0.940, 0.989)",<0.001

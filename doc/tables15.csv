@@ -1,0 +1,22 @@
+Type,Variable,,HR (95% CI),p-value
+Independent variable,COVID-19,1 vs. 0,"3.041 (1.805, 5.122)",<0.001
+Independent variable,COVID-19 vaccination,1 vs. 0,"0.164 (0.063, 0.426)",<0.001
+Independent variable,COVID-19 vaccination,2 vs. 0,"0.364 (0.174, 0.763)",0.006
+Memory-dependent covariate,Age at COVID-19 diagnosis (year),,"1.042 (1.027, 1.058)",<0.001
+Memory-dependent covariate,Cigarette smoking duration,,"1.028 (1.003, 1.053)",0.007
+Memory-dependent covariate,Cardiovascular diseases at COVID-19 diagnosis,1 vs. 0,"3.086 (1.681, 5.664)",0.001
+Memory-dependent covariate,Diabetes mellitus at COVID-19 diagnosis,1 vs. 0,"2.696 (1.547, 4.700)",<0.001
+Memory-dependent covariate,Sore throat at COVID-19 diagnosis,1 vs. 0,"0.564 (0.339, 0.936)",0.022
+Memory-dependent covariate,Other symptoms at COVID-19 diagnosis,1 vs. 0,"0.447 (0.211, 0.947)",0.019
+Memory-independent covariate,Age at data collection (year),,"1.040 (1.025, 1.055)",<0.001
+Memory-independent covariate,Educational status,Primary/Junior High School vs. College,"4.335 (2.423, 7.759)",<0.001
+Memory-independent covariate,Educational status,Never school vs. College,"3.126 (1.103, 8.864)",>0.05
+Memory-independent covariate,Marital status,Married vs. Unmarried,"2.617 (1.188, 5.766)",0.012
+Memory-independent covariate,Marital status,Widowed vs. Unmarried,"4.444 (1.580, 12.503)",0.001
+Memory-independent covariate,Marital status,Divorced vs. Unmarried,"9.360 (2.814, 31.132)",0.001
+Memory-independent covariate,Occupational status,Public servant vs. Unemployed,"0.480 (0.243, 0.948)",0.041
+Memory-independent covariate,Occupational status,White-collar employee vs. Unemployed,"0.312 (0.161, 0.603)",<0.001
+Memory-independent covariate,Occupational status,Other occupation vs. Unemployed,"0.424 (0.189, 0.949)",0.020
+Memory-independent covariate,Body height (cm),,"0.973 (0.956, 0.990)",<0.001
+Memory-independent covariate,MoCA-INA interviewer,4 vs. 1,"2.030 (1.062, 3.882)",0.025
+"Dependent variable, post-acute sequelae of COVID-19",SBQ-LC cluster of post-acute sequelae,1 vs. 0,"1.819 (1.040, 3.181)",0.026

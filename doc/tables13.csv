@@ -1,0 +1,12 @@
+Type,Variable,,HR (95% CI),p-value
+Independent variable,COVID-19,1 vs. 0,"2.464 (1.752, 3.464)",<0.001
+Independent variable,COVID-19 vaccination,1 vs. 0,"0.155 (0.070, 0.346)",<0.001
+Memory-dependent covariate,Age at COVID-19 diagnosis (year),,"1.015 (1.004, 1.025)",0.011
+Memory-dependent covariate,Fever at COVID-19 diagnosis,1 vs. 0,"0.530 (0.376, 0.748)",<0.001
+Memory-dependent covariate,Loss of smell at COVID-19 diagnosis,1 vs. 0,"0.444 (0.317, 0.623)",<0.001
+Memory-dependent covariate,Nausea/vomiting at COVID-19 diagnosis,1 vs. 0,"0.599 (0.400, 0.897)",0.012
+Memory-dependent covariate,Sore throat at COVID-19 diagnosis,1 vs. 0,"0.552 (0.385, 0.792)",<0.001
+Memory-independent covariate,Age at data collection (year),,"1.013 (1.002, 1.023)",0.025
+Memory-independent covariate,Marital status,Married vs. Unmarried,"1.698 (1.022, 2.822)",>0.05
+Memory-independent covariate,Marital status,Divorced vs. Unmarried,"23.598 (8.002, 69.595)",<0.001
+Memory-independent covariate,Occupational status,Other occupation vs. Unemployed,"0.515 (0.274, 0.968)",0.042
