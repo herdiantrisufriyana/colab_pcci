@@ -1,0 +1,28 @@
+colname,old_cat,new_cat
+regency,Bantul,1-Bantul
+regency,Gunung Kidul,4-Gunung Kidul
+regency,Kulon Progo,3-Kulon Progo
+regency,Sleman,2-Sleman
+regency,Yogyakarta,0-Yogyakarta
+area,Rural,1-Rural
+area,Urban,0-Urban
+sex,Female,1-Female
+sex,Male,0-Male
+education,College,0-College
+education,Never school,3-Never school
+education,Primary/Junior High School,2-Primary/Junior High School
+education,Senior High School,1-Senior High School
+occupation,Blue-collar employee,4-Blue-collar employee
+occupation,Other occupation,6-Other occupation
+occupation,Public servant,2-Public servant
+occupation,Self-employee,5-Self-employee
+occupation,Student,1-Student
+occupation,Unemployed,0-Unemployed
+occupation,White-collar employee,3-White-collar employee
+marriage,Divorced,3-Divorced
+marriage,Married,1-Married
+marriage,Unmarried,0-Unmarried
+marriage,Widowed,2-Widowed
+severity,Mild,0-Mild
+severity,Moderate,1-Moderate
+severity,Severe,2-Severe

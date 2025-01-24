@@ -1,0 +1,28 @@
+colname,old_cat
+regency,Bantul
+regency,Gunung Kidul
+regency,Kulon Progo
+regency,Sleman
+regency,Yogyakarta
+area,Rural
+area,Urban
+sex,Female
+sex,Male
+education,College
+education,Never school
+education,Primary/Junior High School
+education,Senior High School
+occupation,Blue-collar employee
+occupation,Other occupation
+occupation,Public servant
+occupation,Self-employee
+occupation,Student
+occupation,Unemployed
+occupation,White-collar employee
+marriage,Divorced
+marriage,Married
+marriage,Unmarried
+marriage,Widowed
+severity,Mild
+severity,Moderate
+severity,Severe

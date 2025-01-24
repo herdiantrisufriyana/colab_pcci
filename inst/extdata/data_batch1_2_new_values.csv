@@ -1,0 +1,69 @@
+old_value,new_value
+Kota Yogyakarta,Yogyakarta
+Sleman,Sleman
+Gunung Kidul,Gunung Kidul
+Kulon Progo,Kulon Progo
+Bantul,Bantul
+Yogyakarta,Yogyakarta
+Gunungkidul,Gunung Kidul
+Kota Yogya,Yogyakarta
+Kulonprogo,Kulon Progo
+Kota,Urban
+Desa,Rural
+Laki-Laki,Male
+Perempuan,Female
+Tamat SD / SMP / sederajat,Primary/Junior High School
+Tamat SMA / sederajat,Senior High School
+Diploma / perguruan tinggi,College
+Tidak sekolah,Never school
+Tidak bekerja,Unemployed
+Pegawai swasta,White-collar employee
+Petani / nelayan/ pedagang,Self-employee
+PNS/TNI/Polri/BUMN/BUMD,Public servant
+Lainnya,Other occupation
+Buruh,Blue-collar employee
+Pelajar / Mahasiswa,Student
+Cerai mati,Widowed
+Menikah,Married
+Belum menikah,Unmarried
+Cerai hidup,Divorced
+Tidak,0
+Ya,1
+0 - Tidak Ada,0
+2 - Sedang,2
+1 - Ringan,1
+3 - Parah,3
+0 - Tidak,0
+1 - Ya,1
+0- Tidak,0
+0 - Tidak Pernah,0
+2 - Kadang-kadang,2
+1 - Jarang,1
+3 - Selalu,3
+"0 - Tidak Ada, 1 - Ringan",1
+Tidak Berlaku,NA
+"0 - Tidak, 1 - Ya",1
+NA,NA
+-,NA
+0 - Tidak sama sekali,0
+1 - Sangat sedikit,1
+2 - Agak,2
+"Daerah pinggang, selangkangan, paha terkadang nyeri",NA
+Ambeyen,NA
+Nyeri pada bagian kedua bahu setiap malam,NA
+"Sering batuk, dahak kental lebih dari 2 minggu",NA
+Lebih dari satu gejala,NA
+Satu gejala,NA
+Ambeyen terasa nyeri berkedut,NA
+CI,1
+N,0
+4,4
+2,2
+1,1
+5,5
+6,6
+3,3
+"Bergejala, penyakit ringan dan rawat jalan (COVID-19 Ringan)",Mild
+Dirawat dirumah sakit dengan terapi oksigen berupa masker atau nasal kanul melalui hidung (COVID-19 Sedang),Moderate
+Dirawat dirumah sakit dengan terapi oksigen aliran tinggi atau masuk ke ICU dengan ventilasi (COVID-19 berat),Severe
+"Dirawat dirumah sakit dengan terapi oksigen berupa masker atau nasal kanul melalui hidung (COVID-19 Sedang), Dirawat dirumah sakit dengan terapi oksigen aliran tinggi atau masuk ke ICU dengan ventilasi (COVID-19 berat)",Severe

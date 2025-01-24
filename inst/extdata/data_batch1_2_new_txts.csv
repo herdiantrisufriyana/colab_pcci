@@ -1,0 +1,20 @@
+old_txt,new_txt
+hipertensi/darah tinggi,hypertension
+tidak ada,
+diabetes/kencing manis/gula,diabetes
+dislipidemia,dyslipidemia
+stroke,stroke
+penyakit paru obstruktif kronis/penyakit paru lainnya,copd
+penyakit jantung dan kardiovaskuler,cvd
+medical_history|lainnya,other_comorbidities
+obesitas/kegemukan,obesity
+riwayat depresi,depression
+demam,other_fever
+diare,other_diarrhea
+batuk,other_cough
+hilang indra penciuman,other_loss_smell
+symptom|lainnya,other_symptoms
+sesak nafas,other_dyspnea
+mual/muntah,other_nausea_vomiting
+nyeri tenggorokan,other_sore_throat
+badan nyeri,other_body_ache

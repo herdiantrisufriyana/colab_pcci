@@ -1,0 +1,199 @@
+old_colname,new_colname
+id,id
+Timestamp,timestamp
+Kabupaten,regency
+Wilayah tempat tinggal,area
+Tanggal lahir,birth_date
+Jenis kelamin,sex
+Pendidikan Terakhir,education
+Pekerjaan,occupation
+Status pernikahan,marriage
+Berapa kali anda terinfeksi oleh COVID-19,prev_inf
+Tanggal berapa terdiagnosis COVID-19,inf_date
+Riwayat penyakit saat menderita COVID-19,medical_history
+Gejala yang dirasakan saat terkonfirmasi COVID-19,symptom
+"Klasifikasi tingkat keparahan COVID-19 
+Apakah pada saat sakit COVID-19 mengalami hal berikut",severity
+"Jika dirawat di Rumah Sakit, berapa lama anda dirawat (tulis 0 jika tidak pernah dirawat)",los
+Apakah anda merokok,cig_smoking
+Jika merokok sudah berapa lama anda merokok,cig_smoking_d
+"Sebelum terinfeksi COVID-19, apakah sudah mendapatkan vaksinasi",vaccine
+Berapa banyak dosis vaksinasi COVID-19 yang sudah anda lakukan hingga hari ini,vaccine_dosage
+Berat badan saat ini,weight
+Tinggi badan saat ini,height
+"Dalam 7 hari terakhir, seberapa parah sesak napas (kesulitan bernapas) yang Anda rasakan saat duduk?",shortness_of_breath_sitting
+"Dalam 7 hari terakhir, seberapa parah sesak napas (kesulitan bernapas) yang Anda rasakan saat menaiki tangga?",shortness_of_breath_climbing
+"Dalam 7 hari terakhir, seberapa parah sesak napas (kesulitan bernapas) yang Anda rasakan saat Anda dalam posisi tidur?",shortness_of_breath_lying
+"Dalam 7 hari terakhir, apakah Anda pernah terbangun di malam hari karena sesak napas?",shortness_of_breath_wakeup
+"Dalam 7 hari terakhir, apakah Anda pernah bernapas lebih cepat dari biasanya?",breathing_faster
+"Dalam 7 hari terakhir, seberapa parah rasa sesak di dada yang Anda rasakan?",chest_tightness
+"Dalam 7 hari terakhir, seberapa parah mengi (napas berbunyi) yang Anda rasakan?",wheezing
+Skor Mentah Skala Pernafasan,breathing_score
+"Dalam 7 hari terakhir, seberapa parah nyeri dada yang pernah Anda rasakan?",chest_pain
+"Dalam 7 hari terakhir, seberapa parah rasa sakit saat bernapas yang pernah Anda rasakan?",breath_pain
+"Dalam 7 hari terakhir, seberapa parah rasa sakit yang Anda rasakan pada bagian tubuh yang terasa sakit paling parah?",stabbing_pain
+"Dalam 7 hari terakhir, seberapa parah rasa nyeri seperti ditusuk-tusuk atau nyeri yang terasa panas/kemranyas yang Anda rasakan di bagian tubuh mana pun yang terasa sakit paling parah?",burning_pain
+Skor Mentah Skala Nyeri,pain_score
+"Dalam 7 hari terakhir, seberapa parah palpitasi (merasa jantung Anda berdebar-debar) yang pernah Anda rasakan?",palpitation
+"Dalam 7 hari terakhir, apakah Anda pernah pingsan?",lightheaded
+"Dalam 7 hari terakhir, seberapa parah rasa pusing yang Anda rasakan saat berdiri?",dizzy_standing
+"Dalam 7 hari terakhir, seberapa parah pembengkakan tungkai dan/atau kaki yang Anda rasakan?",swelling_leg_feet
+"Dalam 7 hari terakhir, apakah Anda pernah mengalami tangan/kaki dingin yang berlangsung lebih lama atau lebih dingin dari biasanya?",cold_hand_feet
+Skor Mentah Skala Sirkulasi,circulation_score
+"Dalam 7 hari terakhir, seberapa parah kelelahan yang pernah Anda rasakan (perasaan lelah fisik atau mental yang tidak membaik dengan istirahat) pada kondisi terburuk Anda?",fatigue
+"Dalam 7 hari terakhir, seberapa parah energi Anda berkurang (tertarik dan ingin melakukan sesuatu tetapi tidak memiliki energi)?",low_energy
+"Dalam 7 hari terakhir, seberapa parah rasa lelah (kebutuhan untuk tidur) yang pernah Anda rasakan pada kondisi terburuk Anda?",tiredness
+"Dalam 7 hari terakhir, seberapa parah gejala Anda memburuk setelah melakukan aktivitas fisik atau mental pada kondisi paling buruk?",post_activity_worsening
+Skor Mentah Skala Kelelahan,fatique_score
+"Dalam 7 hari terakhir, seberapa parah Anda sulit untuk mengingat hal-hal yang paling buruk?",remembering
+"Dalam 7 hari terakhir, seberapa parah ingatan Anda hilang?",memory_loss
+"Dalam 7 hari terakhir, seberapa parah Anda sulit fokus dan konsentrasi (merasa lemot, bingung, atau blank)?",brain_fog
+"Dalam 7 hari terakhir, seberapa sering Anda merasa bingung dengan apa yang terjadi di sekitar Anda?",confusion
+"Dalam 7 hari terakhir, seberapa sering Anda mengalami kesulitan berkonsentrasi?",concentrating
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda dalam merencanakan sesuatu?",planning
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda dalam menemukan kata (tidak dapat memikirkan kata yang ingin Anda ucapkan atau tulis)?",word_finding
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda memahami perkataan orang lain?",understanding
+"Dalam 7 hari terakhir, seberapa parah Anda cadel dalam berbicara?",speaking
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami kesulitan membaca (Tidak terkait dengan disleksia)?",reading
+"Skor Mentah Skala Ingatan, Pikiran & Komunikasi:",memory_thinking_communication_score
+"Dalam 7 hari terakhir, seberapa parah tremor (guncangan atau gemetar yang tidak terkendali pada sebagian tubuh Anda) yang pernah Anda rasakan?",tremor
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda dalam menjaga keseimbangan tubuh?",balance
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda dalam bergerak dan berkoordinasi?",coordination
+Skor Mentah Skala Gerakan,movement_score
+"Dalam 7 hari terakhir, seberapa sering Anda mengalami masalah tidur?",sleep_prob
+"Dalam 7 hari terakhir, seberapa sering Anda tidur lebih singkat dari biasanya?",sleep_short
+"Dalam 7 hari terakhir, seberapa sering tidur Anda terganggu?",sleep_interupt
+"Dalam 7 hari terakhir, seberapa sering Anda tidur lebih lama dari biasanya?",sleep_long
+Skor Mentah Skala Tidur,sleep_score
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami perubahan indera penciuman (makanan/benda yang berbau berbeda dari biasanya)?",altered_smell
+"Dalam 7 hari terakhir, seberapa parah perubahan indera perasa Anda (makanan terasa berbeda dari biasanya)?",altered_taste
+"Dalam 7 hari terakhir, seberapa parah bersin yang Anda alami?",sneezing
+"Dalam 7 hari terakhir, seberapa parah hidung Anda terasa pengap atau lebih berair dari biasanya?",runny_nose
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami hidung tersumbat (rasa tidak nyaman atau rasa 'penuh' di sekitar hidung, pipi, dahi, atau di sekitar mata)?",sinus_congestion
+"Dalam 7 hari terakhir, seberapa parah produksi lendir (dahak) yang Anda rasakan?",phlegm
+"Dalam 7 hari terakhir, seberapa parah batuk yang Anda rasakan?",cough
+"Dalam 7 hari terakhir, seberapa parah sakit tenggorokan yang Anda rasakan?",sore_throat
+"Dalam 7 hari terakhir, seberapa parah suara serak yang Anda alami (perubahan kualitas suara Anda)?",hoarse_voice
+"Dalam 7 hari terakhir, apakah Anda mengalami kesulitan menelan makanan atau minuman?",swallowing
+"Dalam 7 hari terakhir, seberapa parah sakit telinga (nyeri telinga) yang pernah Anda rasakan?",ear_pain
+"Dalam 7 hari terakhir, apakah Anda pernah mengalami keluhan gangguan pendengaran?",hearing_loss
+"Dalam 7 hari terakhir, seberapa parah tinnitus (suara bising atau dering di telinga) yang pernah Anda rasakan?",tinnitus
+"Dalam 7 hari terakhir, seberapa parah kepekaan Anda terhadap suara yang tidak menjadi masalah bagi orang lain (suara sehari-hari yang terdengar sangat keras dan/atau menyakitkan)?",sound_sensitivity
+"Skor Mentah Skala Nyeri Telinga, Hidung & Tenggorokan",ent_score
+"Dalam 7 hari terakhir, seberapa parah sakit perut/nyeri perut yang pernah Anda rasakan?",tummy_pain
+"Dalam 7 hari terakhir, seberapa parah kembung pada area perut yang pernah Anda rasakan?",bloating
+"Dalam 7 hari terakhir, seberapa parah rasa mual (ingin muntah) yang pernah Anda rasakan?",nausea
+"Dalam 7 hari terakhir, seberapa parah gangguan pencernaan dan/atau nyeri ulu hati yang pernah Anda rasakan?",indigestion_heartburn
+"Dalam 7 hari terakhir, apakah Anda khawatir tentang penurunan berat badan Anda yang tidak direncanakan?",weight_loss
+"Dalam 7 hari terakhir, apakah Anda pernah merasa khawatir dengan kenaikan berat badan yang tidak direncanakan?",weight_gain
+"Dalam 7 hari terakhir, seberapa parah diare Anda?",diarrhea
+"Dalam 7 hari terakhir, seberapa parah sembelit (buang air besar lebih jarang dari biasanya) yang pernah Anda alami?",constipation
+Skor Mentah Skala Perut & Pencernaan,stomach_digestion_score
+"Dalam 7 hari terakhir, seberapa parah nyeri otot yang pernah Anda alami?",muscle_pain
+"Dalam 7 hari terakhir, seberapa parah kelemahan otot yang pernah Anda alami?",muscle_weakness
+"Dalam 7 hari terakhir, seberapa parah kekakuan otot yang pernah Anda alami?",muscle_stiffness
+"Dalam 7 hari terakhir, seberapa parah nyeri sendi yang pernah Anda alami?",joint_pain
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami pembengkakan sendi ?",joint_swelling
+"Dalam 7 hari terakhir, seberapa parah kekakuan sendi yang pernah Anda alami?",joint_stiffness
+"Dalam 7 hari terakhir, seberapa parah Anda merasa otot Anda berkedut?",muscle_twitching
+"Dalam 7 hari terakhir, seberapa parah kram otot yang pernah Anda rasakan?",muscle_cramping
+"Dalam 7 hari terakhir, seberapa parah kesemutan dan mati rasa (seperti ditusuk-tusuk jarum) di lengan dan kaki yang pernah Anda rasakan?",tingling_numbness
+Skor Mentah Skala Otot & Sendi,muscle_joint_score
+"Dalam 7 hari terakhir, seberapa parah kurangnya minat Anda terhadap hal-hal di sekitar Anda?",lack_interest
+"Dalam 7 hari terakhir, seberapa parah kecemasan Anda dalam kondisi terburuk?",anxiety
+"Dalam 7 hari terakhir, seberapa parah perasaan sedih dan sengsara yang Anda rasakan?",sadness
+"Dalam 7 hari terakhir, apakah Anda pernah berpikir untuk menyakiti diri sendiri dengan cara apa pun?",self_harm
+"Dalam 7 hari terakhir, seberapa parah perubahan suasana hati Anda pada saat terburuk?",mood_swing
+"Dalam 7 hari terakhir, seberapa parah perubahan nafsu makan Anda?",appetite
+"Dalam 7 hari terakhir, seberapa sering Anda merasa kesepian atau tidak didukung?",lonely
+"Dalam 7 hari terakhir, seberapa sering Anda merasa memiliki harapan tentang masa depan?",hopeful
+"Dalam 7 hari terakhir, apakah Anda merasa seperti orang yang sama dengan Anda sebelum terjangkit COVID-19?**",same_person
+Skor Mentah Skala Kesehatan & Kesejahteraan Mental:,mental_health_wellbeing_score
+"Dalam 7 hari terakhir, seberapa parah kondisi kulit kering Anda?",dry_skin
+"Dalam 7 hari terakhir, seberapa parah Anda merasa kulit Anda bersisik?",scaly_skin
+"Dalam 7 hari terakhir, seberapa parah kulit Anda gatal?",itchy_skin
+"Dalam 7 hari terakhir, apakah Anda memiliki bintik-bintik ungu-merah pada kaki?",purple_red_spot
+"Dalam 7 hari terakhir, apakah Anda mengalami ruam?",rash
+"Dalam 7 hari terakhir, apakah Anda mengalami gatal-gatal (luka atau bercak gatal pada kulit)?",hives
+"Dalam 7 hari terakhir, seberapa parah kerontokan rambut yang pernah Anda alami?",hair_loss
+"Dalam 7 hari terakhir, seberapa parah perubahan yang terjadi pada kuku Anda (benjolan, lubang, perubahan warna, atau kuku rapuh)?",nail
+Skor Mentah Skala Kulit & Rambut,skin_hair_score
+"Dalam 7 hari terakhir, apakah Anda mengalami mata merah atau merah darah?",red_eye
+"Dalam 7 hari terakhir, apakah Anda mengalami mata kering?",dry_eye
+"Dalam 7 hari terakhir, apakah Anda mengalami mata gatal?",itchy_eye
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami penglihatan kabur dan/atau penglihatan ganda (Tidak terkait dengan penggunaan kacamata)?",blurred_vision
+"Dalam 7 hari terakhir, seberapa sering Anda melihat banyangan cahaya flash dan/atau floaters (bentuk gelap kecil yang melayang-layang di penglihatan Anda)?",floater
+"Dalam 7 hari terakhir, seberapa parah sensitivitas mata Anda terhadap cahaya?",light_sensitivity
+"Dalam 7 hari terakhir, apakah Anda mengalami mata berair (air mata berlebihan)?",watery_eye
+"Dalam 7 hari terakhir, apakah Anda merasa ada tekanan di belakang mata Anda?",press_behind_eye
+"Dalam 7 hari terakhir, seberapa parah rasa sakit di belakang mata Anda?",pain_behind_eye
+"Dalam 7 hari terakhir, seberapa sering Anda merasa ada sesuatu yang mengganjal di mata saat Anda berkedip (sensasi benda asing)?",foreign_body_sensation
+Skor Mentah Skala Mata,eye_score
+"Dalam sebulan terakhir, apakah Anda mengalami perubahan yang tidak biasa pada periode menstruasi Anda (menstruasi tidak teratur, terlewat, atau tidak terduga)?",unusual_menstruation
+"Dalam sebulan terakhir, apakah sindrom pramenstruasi (PMS) Anda lebih buruk dari biasanya?",premenstrual_syndrome
+"Dalam sebulan terakhir, apakah Anda mengeluarkan gumpalan darah selama menstruasi lebih banyak dari biasanya?",menstrual_blood_clot
+"Dalam 7 hari terakhir, seberapa parah tingkat kekeringan vagina Anda?",dry_vagina
+"Dalam 7 hari terakhir, seberapa parah keputihan Anda?",vaginal_discharge
+"Dalam 7 hari terakhir, apakah Anda khawatir tentang kemampuan Anda untuk mengalami orgasme atau klimaks?",female_orgasm
+"Dalam 7 hari terakhir, seberapa parah penurunan minat Anda terhadap seks?",female_sex_interest
+Skor Mentah Skala Kesehatan Reproduksi & Seksual Perempuan:,female_repro_score
+"Dalam 7 hari terakhir, seberapa parah kesulitan Anda mendapatkan atau mempertahankan ereksi?",erection
+"Dalam 7 hari terakhir, apakah Anda mengalami kesulitan ejakulasi?",ejaculation
+"Dalam 7 hari terakhir, apakah Anda mengalami penurunan minat terhadap seks?",male_sex_interest
+Skor Mentah Skala Kesehatan Reproduksi & Seksual Pria,male_repro_score
+"Dalam 7 hari terakhir, apakah Anda mengalami demam?",fever
+"Dalam 7 hari terakhir, seberapa sering Anda panas-dingin/gemetar (derodok)?",shivering
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami masalah keringat?",sweating
+"Dalam 7 hari terakhir, seberapa parah Anda mengalami pipi merah?",hot_flush
+"Dalam 7 hari terakhir, seberapa parah rasa sakit yang Anda rasakan di sekujur tubuh?",body_ache
+"Dalam 7 hari terakhir, seberapa parah pembengkakan kelenjar (kelenjar getah bening) yang pernah Anda alami?",swelling_lymph_node
+"Dalam 7 hari terakhir, seberapa parah vertigo yang pernah Anda rasakan (ketika segala sesuatu di sekitar Anda berputar sehingga memengaruhi keseimbangan Anda)?",vertigo
+"Dalam 7 hari terakhir, apakah Anda mengalami pembengkakan pada wajah, bibir, lidah, dan/atau tenggorokan?",swelling_face
+"Dalam 7 hari terakhir, apakah Anda mengalami reaksi yang meningkat terhadap alergi yang diketahui?",known_allergy
+"Dalam 7 hari terakhir, apakah Anda mengalami reaksi  alergi baru?",new_allergy
+"Dalam 7 hari terakhir, apakah Anda mengalami kehilangan kendali atas air seni (kebocoran)?",urine_control
+"Dalam 7 hari terakhir, apakah Anda mengalami kesulitan buang air kecil?",urine_difficulty
+"Dalam 7 hari terakhir, apakah Anda buang air kecil lebih banyak dari biasanya?",more_urine
+"Dalam 7 hari terakhir, seberapa parah meningkatnya rasa haus yang Anda rasakan?",thirst
+"Dalam 7 hari terakhir, seberapa parah sariawan yang pernah Anda alami?",mouth_ulcer
+"Dalam 7 hari terakhir, apakah Anda pernah mengalami perburukan masalah gigi yang diketahui?",worsen_dental_prob
+"Dalam 7 hari terakhir, seberapa parah kondisi mulut kering yang Anda rasakan?",dry_mouth
+"Dalam 7 hari terakhir, seberapa parah sakit kepala yang Anda rasakan?",headache
+Skor Mentah Skala Gejala Lain,others_score
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk bekerja, menjadi sukarelawan, bersekolah, atau ikut serta dalam kegiatan-kegiatan terorganisir?",working
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk berbelanja?",shopping
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk melakukan pekerjaan rumah tangga atau tugas-tugas ringan?",houseworking
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk merawat diri sendiri (mandi dan berpakaian)?",bathing_dressing
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi hubungan Anda dengan orang lain (teman dan keluarga)?",relationship
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk bersosialisasi dan berinteraksi dengan orang lain?",socializing
+"Dalam 7 hari terakhir, apakah gejala-gejala yang Anda alami memengaruhi kemampuan Anda untuk menikmati hidup?",enjoying_life
+Skor Mentah Skala Dampak pada Kehidupan Sehari-hari,daily_life_score
+Apakah Anda memiliki gejala lain yang ingin Anda laporkan?,other_symptom
+"Jika YA, gejala apa lagi yang ingin Anda laporkan?",other_symptom_what
+"Dalam 7 hari terakhir, adakah gejala yang Anda alami",other_symptom_7d
+"Dalam 7 hari terakhir, sebut gejala yang Anda alami....172",other_symptom_what_7d
+Seberapa parah gejala yang Anda rasakan pada jawaban sebelumnya?...173,other_symptom_severity_7d
+"Dalam 7 hari terakhir, sebut gejala yang Anda alami....174",other_symptom_what_7d_2
+Seberapa parah gejala yang Anda rasakan pada jawaban sebelumnya?...175,other_symptom_severity_7d_2
+"Dalam 7 hari terakhir, sebut gejala lain yang Anda alami.",other_symptom_what_7d_3
+Seberapa parah gejala yang Anda rasakan pada jawaban sebelumnya?...177,other_symptom_severity_7d_3
+"Dalam 7 hari terakhir, sebut gejala yang Anda alami....178",other_symptom_what_7d_4
+Seberapa parah gejala yang Anda rasakan pada jawaban sebelumnya?...179,other_symptom_severity_7d_4
+"Dalam 7 hari terakhir, sebut gejala yang Anda alami....180",other_symptom_what_7d_5
+Seberapa parah gejala yang Anda rasakan pada jawaban sebelumnya?...181,other_symptom_severity_7d_5
+Visuospasial/Eksekutif,moca_ina_visuospatial_exec
+Penamaan,moca_ina_naming
+Memori Ke-1,moca_ina_memory_min0
+Memori Ke-2,moca_ina_memory_min5
+Atensi Angka,moca_ina_attention_digits
+Atensi Huruf,moca_ina_attention_letters
+Atensi Pengurangan,moca_ina_attention_substract
+Bahasa Ulangi,moca_ina_language_repeat
+Bahasa Sebutkan,moca_ina_language_fluency
+Abstraksi,moca_ina_abstraction
+Delayed Recall,moca_ina_delayed_recall
+Orientasi,moca_ina_orientation
+Nilai Total MoCA-INA,moca_ina_total
+Koversi,moca_ina_class
+interviewer SBQ-LC,interviewer_sbq_lc
+interviewer Moca Ina,interviewer_moca_ina
