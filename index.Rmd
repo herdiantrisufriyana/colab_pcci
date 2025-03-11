@@ -1354,7 +1354,8 @@ ggsave("doc/figures5.eps", height = 5.5118, width = 5.5118)
 ## Handling missing outcome
 
 ```{r Process and extract data batch 2 of SBQ-LC scores, include=FALSE}
-data_batch2_mv_data0 <- data_batch2[,str_detect(colnames(data_batch2),"_score")]
+data_batch2_mv_data0 <-
+  data_batch2[,str_detect(colnames(data_batch2),"_score")]
 ```
 
 ```{r Show missing values  of SBQ-LC in batch 2, eval=FALSE, include=FALSE}
@@ -1365,9 +1366,28 @@ data_batch2_mv_data0 |>
   mutate(p_missing = round(n_missing / n * 100, 2))
 ```
 
+```{r Process and extract data batch 1 & 2 of SBQ-LC scores, include=FALSE}
+data_batch1_2_mv_data0 <-
+  data_batch1_2[,str_detect(colnames(data_batch1_2),"_score")]
+```
+
+```{r Show missing values  of SBQ-LC in batch 1 & 2, eval=FALSE, include=FALSE}
+data_batch1_2_mv_data0 |>
+  gather(variable,value) |>
+  group_by(variable) |>
+  summarize(n = n(), n_missing = sum(is.na(value))) |>
+  mutate(p_missing = round(n_missing / n * 100, 2))
+```
+
 ```{r Develop imputation model from SBQ-LC in batch 2, include=FALSE}
 data_batch2_imputation_model <-
   data_batch2_mv_data0 |>
+  mice(m = 10, method="pmm", seed = seed, print = FALSE)
+```
+
+```{r Develop imputation model from SBQ-LC in batch 1 & 2, include=FALSE}
+data_batch1_2_imputation_model <-
+  data_batch1_2_mv_data0 |>
   mice(m = 10, method="pmm", seed = seed, print = FALSE)
 ```
 
@@ -1384,26 +1404,13 @@ data_batch2_mv_data1 <-
   complete()
 ```
 
-```{r Process and extract data batch 1 & 2 of SBQ-LC scores, include=FALSE}
-data_batch1_2_preval_data0 <-
-  data_batch1_2[,str_detect(colnames(data_batch1_2),"_score")]
-```
-
-```{r Show missing values  of SBQ-LC in batch 1 & 2, eval=FALSE, include=FALSE}
-data_batch1_2_preval_data0 |>
-  gather(variable, value) |>
-  group_by(variable) |>
-  summarize(n = n(), n_missing = sum(is.na(value))) |>
-  mutate(p_missing = round(n_missing / n * 100, 2))
-```
-
-```{r Conduct MICE for SBQ-LC in batch 1 & 2 based on batch 2, include=FALSE}
-data_batch1_2_preval_data1 <-
-  data_batch1_2_preval_data0 |>
+```{r Conduct MICE for SBQ-LC in batch 1 & 2, include=FALSE}
+data_batch1_2_mv_data1 <-
+  data_batch1_2_mv_data0 |>
   mice(
     m = 10
-    , method = "norm.predict"
-    , predictorMatrix = data_batch2_imputation_model$predictorMatrix
+    , method="norm.predict"
+    , predictorMatrix = data_batch1_2_imputation_model$predictorMatrix
     , seed = seed
     , print = FALSE
   ) |>
@@ -1519,11 +1526,157 @@ data_batch2_mv_data <-
   )
 ```
 
+```{r Process and extract data batch 1 & 2 for mv reg analysis, include=FALSE}
+data_batch1_2_mv_data <-
+  data_batch1_2_mv_data1 |>
+  mutate(seq = seq(nrow(data_batch1_2_mv_data1))) |>
+  gather(colname, new_score, -seq)
+
+data_batch1_2_mv_data <-
+  data_batch1_2_mv_data |>
+  rbind(
+    group_by(data_batch1_2_mv_data, seq) |>
+      summarize(new_score = mean(is.na(new_score)) == 0) |>
+      mutate(colname = "complete") |>
+      select(colname, new_score, everything())
+  ) |>
+  mutate(colname = factor(colname, unique(colname))) |>
+  spread(colname, new_score) |>
+  arrange(seq) |>
+  filter(complete == 1) |>
+  select(-complete) |>
+  column_to_rownames(var = "seq") |>
+  as.matrix()
+
+data_batch1_2_mv_data <-
+  data_batch1_2_mv_data %*% data_batch1_pca$rotation[, "PC1", drop = FALSE]
+
+data_batch1_2_mv_data <-
+  as.data.frame(data_batch1_2_mv_data) |>
+  rownames_to_column(var = "seq") |>
+  mutate(seq = as.numeric(seq)) |>
+  rename(sbq_lc_total = PC1) |>
+  right_join(
+    data_batch1_2 |>
+      mutate(seq = seq(nrow(data_batch1_2))) |>
+      select(seq)
+    , by = join_by(seq)
+  ) |>
+  mutate(
+    sbq_lc_class =
+      case_when(
+        sbq_lc_total > pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 1"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 1-2`
+          & sbq_lc_total > pc1_cl_intersections$`Cluster 2-3`
+          ~ "Cluster 2"
+        , sbq_lc_total <= pc1_cl_intersections$`Cluster 2-3`
+          ~ "Cluster 3"
+      ) |>
+      factor(c("Cluster 1", "Cluster 2", "Cluster 3"))
+  ) |>
+  left_join(
+    data_batch1_2[
+      , !str_detect(colnames(data_batch1_2),"_score")
+        | colnames(data_batch2)=="memory_thinking_communication_score"
+      ] |>
+      mutate(seq = seq(nrow(data_batch1_2)))
+    , by = join_by(seq)
+  ) |>
+  arrange(seq) |>
+  column_to_rownames(var = "seq") |>
+  mutate(
+    bmi = weight / ((height/100)^2)
+    , bmi =
+      case_when(
+        bmi < 18.5 ~ "Underweight"
+        , bmi >= 18.5 & bmi < 25 ~ "Normal"
+        , bmi >= 25 & bmi < 30 ~ "Overweight"
+        , bmi >= 30 ~ "Obesity"
+      ) |>
+      factor(c("Underweight", "Normal", "Overweight", "Obesity"))
+  ) |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          label == "MoCA-INA status of cognitive impairment"
+          | label == "SBQ-LC cluster of post-acute sequelae"
+          | type
+            %in% c(
+              "Independent variable"
+              , "Independent variable, indicator"
+              , "Memory-independent covariate"
+              , "Memory-dependent covariate"
+            )
+          | label
+            %in% c(
+              "Memory, thinking, and communication score"
+              , "SBQ-LC interviewer"
+              , "Delayed recall"
+              , "MoCA-INA interviewer"
+            )
+        ) |>
+        arrange(
+          factor(
+            type
+            , c("Independent variable"
+                , "Independent variable, indicator"
+                , "Memory-independent covariate"
+                , "Memory-dependent covariate"
+                , "Dependent variable, post-acute sequelae of COVID-19"
+                , "Dependent variable, cognitive impairment of COVID-19"
+              )
+          )
+        ) |>
+        pull(variable)
+    )
+  )
+```
+
 ### SBQ-LC descriptive analytics
 
 ```{r Separate data for SBQ-LC descriptive analytics, include=FALSE}
 data_batch2_sbq_lc_mv_data0 <-
   data_batch2_mv_data |>
+  select_at(
+    c("id"
+      , variable_label_type |>
+        filter(
+          label == "SBQ-LC cluster of post-acute sequelae"
+          | type
+            %in% c(
+              "Independent variable"
+              , "Memory-independent covariate"
+              , "Memory-dependent covariate"
+            )
+          | label
+            %in% c(
+              "Memory, thinking, and communication score"
+              , "SBQ-LC interviewer"
+              , "Delayed recall"
+              , "MoCA-INA interviewer"
+            )
+        ) |>
+        arrange(
+          factor(
+            type
+            , c("Independent variable"
+                , "Memory-independent covariate"
+                , "Memory-dependent covariate"
+                , "Dependent variable, post-acute sequelae of COVID-19"
+                , "Dependent variable, cognitive impairment of COVID-19"
+              )
+          )
+        ) |>
+        pull(variable)
+    )
+  ) |>
+  rename(batch = sbq_lc_class)
+```
+
+```{r Separate data for SBQ-LC batch 1 & 2 descriptive analytics, include=FALSE}
+data_batch1_2_sbq_lc_mv_data0 <-
+  data_batch1_2_mv_data |>
   select_at(
     c("id"
       , variable_label_type |>
@@ -1625,6 +1778,30 @@ data_batch2_sbq_lc_mv_data1 <-
       data_batch2_sbq_lc_mv_data1 |>
         select(id, age_timestamp, age_inf_date)
       , data_batch2_sbq_lc_mv_data1 |>
+        select(-id, -age_timestamp, -age_inf_date) |>
+        assign_missing(var_med_iqr = trans_data$none_med_iqr) |>
+        mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
+        complete()
+    )
+  ) |>
+  mutate(age_inf_date = age_timestamp - interview_onset) |>
+  select(
+    id, interview_onset, exposure, vaccine, regency,area, age_timestamp
+    , everything()
+  )
+```
+
+```{r Conduct MICE for SBQ-LC multivariate data for batch 1 & 2, include=FALSE}
+data_batch1_2_sbq_lc_mv_data1 <-
+  data_batch1_2_sbq_lc_mv_data0 |>
+  mutate(interview_onset = age_timestamp - age_inf_date)
+
+data_batch1_2_sbq_lc_mv_data1 <-
+  suppressWarnings(
+    cbind(
+      data_batch1_2_sbq_lc_mv_data1 |>
+        select(id, age_timestamp, age_inf_date)
+      , data_batch1_2_sbq_lc_mv_data1 |>
         select(-id, -age_timestamp, -age_inf_date) |>
         assign_missing(var_med_iqr = trans_data$none_med_iqr) |>
         mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
@@ -1826,6 +2003,32 @@ data_batch2_sbq_lc_mv_data2 <-
   )
 ```
 
+```{r Create dichotomic outcome SBQ-LC for batch 1 & 2, include=FALSE}
+data_batch1_2_sbq_lc_mv_data2 <-
+  data_batch1_2_sbq_lc_mv_data1 |>
+  select(id, interview_onset, batch) |>
+  rownames_to_column(var = "seq") |>
+  mutate_at("seq", as.numeric) |>
+  mutate(
+    interview_onset = floor(interview_onset * dyears(1) / dmonths(1))
+    , value = 1
+  ) |>
+  spread(batch, value, fill = 0) |>
+  column_to_rownames(var = "seq") |>
+  arrange(interview_onset) |>
+  gather(batch, outcome, -id, -interview_onset) |>
+  mutate(
+    batch = ifelse(batch == "Cluster 1", "Cluster 2+3", batch)
+    , outcome =
+      ifelse(batch == "Cluster 1", ifelse(outcome == 1, 0, 1), outcome)
+  ) |>
+  filter(batch != levels(data_batch1_2_sbq_lc_mv_data1$batch)[1]) |>
+  right_join(
+    select(data_batch1_2_sbq_lc_mv_data1, -interview_onset,-batch)
+    , by = join_by(id)
+  )
+```
+
 ```{r Kaplan-Meier SBQ-LC estimator and sample size per month, include=FALSE}
 figures6 <-
   data_batch2_sbq_lc_mv_data2 |>
@@ -1898,11 +2101,21 @@ data_batch2_sbq_lc_mv_data <-
   lapply(\(x) filter(data_batch2_sbq_lc_mv_data2, batch == x))
 ```
 
+```{r Finalize multivariate data SBQ-LC for batch 1 & 2, include=FALSE}
+data_batch1_2_sbq_lc_mv_data <-
+  sort(unique(data_batch1_2_sbq_lc_mv_data2$batch))
+
+data_batch1_2_sbq_lc_mv_data <-
+  data_batch1_2_sbq_lc_mv_data |>
+  `names<-`(as.character(data_batch1_2_sbq_lc_mv_data)) |>
+  lapply(\(x) filter(data_batch1_2_sbq_lc_mv_data2, batch == x))
+```
+
 ### MoCA-INA descriptive analytics
 
 ```{r Separate data for MoCA-INA descriptive analytics, include=FALSE}
-data_batch2_moca_ina_mv_data0 <-
-  data_batch2_mv_data |>
+data_batch1_2_moca_ina_mv_data0 <-
+  data_batch1_2_mv_data |>
   select_at(
     c("id"
       , variable_label_type |>
@@ -1947,14 +2160,14 @@ data_batch2_moca_ina_mv_data0 <-
 ```
 
 ```{r Compute descriptive statistics for MoCA-INA pre-impute, include=FALSE}
-data_batch2_moca_ina_desc0 <-
-  data_batch2_moca_ina_mv_data0 |>
+data_batch1_2_moca_ina_desc0 <-
+  data_batch1_2_moca_ina_mv_data0 |>
   desc_stats(var_med_iqr = trans_data$none_med_iqr, outlier_per_batch = FALSE)
 ```
 
 ```{r Relabel var. & classify  by var. type MoCA-INA pre-impute, include=FALSE}
-data_batch2_moca_ina_desc1 <-
-  data_batch2_moca_ina_desc0 |>
+data_batch1_2_moca_ina_desc1 <-
+  data_batch1_2_moca_ina_desc0 |>
   left_join(variable_label_type, by = join_by(variable)) |>
   mutate(variable = label) |>
   select(-label) |>
@@ -1967,7 +2180,7 @@ data_batch2_moca_ina_desc1 <-
 
 ```{r MoCA-INA - Description of missing values and outliers, include=FALSE}
 tables7 <-
-  data_batch2_moca_ina_desc1 |>
+  data_batch1_2_moca_ina_desc1 |>
   filter(str_detect(str_to_lower(category), "^outlier|^missing")) |>
   mutate_at(
     c("type", "variable"), \(x) ifelse(duplicated(x), "", as.character(x))
@@ -2000,15 +2213,15 @@ write_csv(tables7,"doc/tables7.csv")
 ```
 
 ```{r Conduct MICE for MoCA-INA multivariate data, include=FALSE}
-data_batch2_moca_ina_mv_data1 <-
-  data_batch2_moca_ina_mv_data0 |>
+data_batch1_2_moca_ina_mv_data1 <-
+  data_batch1_2_moca_ina_mv_data0 |>
   mutate(interview_onset = age_timestamp - age_inf_date)
 
-data_batch2_moca_ina_mv_data1 <-
+data_batch1_2_moca_ina_mv_data1 <-
   suppressWarnings(
     cbind(
-      select(data_batch2_moca_ina_mv_data1, id,age_timestamp,age_inf_date)
-      , data_batch2_moca_ina_mv_data1 |>
+      select(data_batch1_2_moca_ina_mv_data1, id,age_timestamp,age_inf_date)
+      , data_batch1_2_moca_ina_mv_data1 |>
         select(-id, -age_timestamp, -age_inf_date) |>
         assign_missing(var_med_iqr = trans_data$none_med_iqr) |>
         mice(m = 10, method = "pmm", seed = seed, print = FALSE) |>
@@ -2023,28 +2236,46 @@ data_batch2_moca_ina_mv_data1 <-
 ```
 
 ```{r Compute descriptive statistics for MoCA-INA, include=FALSE}
-data_batch2_moca_ina_desc2 <-
-  data_batch2_moca_ina_mv_data1 |>
+data_batch1_2_moca_ina_desc2 <-
+  data_batch1_2_moca_ina_mv_data1 |>
   desc_stats(var_med_iqr = trans_data$none_med_iqr)
 ```
 
 ```{r Compute vertical-desc statistics for MoCA-INA, include=FALSE}
-data_batch2_moca_ina_desc2_ver <-
-  data_batch2_moca_ina_mv_data1 |>
+data_batch1_2_moca_ina_desc2_ver <-
+  data_batch1_2_moca_ina_mv_data1 |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      ) |>
+      factor()
+  ) |>
   desc_stats_vertical() |>
   mutate(variable = ifelse(variable == "batch", "moca_ina_class", variable))
 ```
 
 ```{r Compute vertical-desc statistics for MoCA-INA per outcome, include=FALSE}
-data_batch2_moca_ina_desc2_ver_outcome <-
-  data_batch2_moca_ina_mv_data1 |>
+data_batch1_2_moca_ina_desc2_ver_outcome <-
+  data_batch1_2_moca_ina_mv_data1 |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      ) |>
+      factor()
+  ) |>
   desc_stats_vertical(p_row = TRUE) |>
   mutate(variable=ifelse(variable == "batch", "moca_ina_class", variable))
 ```
 
 ```{r Relabel var. & classify them by var. type MoCA-INA, include=FALSE}
-data_batch2_moca_ina_desc3 <-
-  data_batch2_moca_ina_desc2 |>
+data_batch1_2_moca_ina_desc3 <-
+  data_batch1_2_moca_ina_desc2 |>
   left_join(variable_label_type, by = join_by(variable)) |>
   mutate(variable = label) |>
   select(-label) |>
@@ -2057,8 +2288,8 @@ data_batch2_moca_ina_desc3 <-
 ```
 
 ```{r Relabel var. & classify desc-ver by var. type MoCA-INA, include=FALSE}
-data_batch2_moca_ina_desc3_ver <-
-  data_batch2_moca_ina_desc2_ver |>
+data_batch1_2_moca_ina_desc3_ver <-
+  data_batch1_2_moca_ina_desc2_ver |>
   left_join(variable_label_type, by = join_by(variable)) |>
   mutate(variable = label) |>
   select(-label) |>
@@ -2072,7 +2303,7 @@ data_batch2_moca_ina_desc3_ver <-
 
 ```{r MoCA-INA - Description of pre-imputed non-missing-outliers, include=FALSE}
 tables8 <-
-  data_batch2_moca_ina_desc1 |>
+  data_batch1_2_moca_ina_desc1 |>
   filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
   mutate_at(
     c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
@@ -2106,7 +2337,7 @@ write_csv(tables8, "doc/tables8.csv")
 
 ```{r Previous description of MoCA-INA multivariate data, include=FALSE}
 tables9 <-
-  data_batch2_moca_ina_desc3 |>
+  data_batch1_2_moca_ina_desc3 |>
   filter(!str_detect(str_to_lower(category), "^outlier|^missing")) |>
   mutate_at(
     c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
@@ -2139,7 +2370,7 @@ write_csv(tables9, "doc/tables9.csv")
 
 ```{r Description of MoCA-INA multivariate data, include=FALSE}
 tables10 <-
-  data_batch2_moca_ina_desc3_ver |>
+  data_batch1_2_moca_ina_desc3_ver |>
   filter(!is.na(category)) |>
   mutate_at(
     c("type","variable"), \(x) ifelse(duplicated(x), "", as.character(x))
@@ -2160,7 +2391,7 @@ tables10 <-
     colnames(tables10) |>
       str_replace_all("category", "") |>
       str_to_sentence() |>
-      str_replace_all("N", "Num. (N=210)") |>
+      str_replace_all("N", "Num. (N=300)") |>
       str_replace_all("P", "%")
   )
 ```
@@ -2180,8 +2411,8 @@ write_csv(tables10, "doc/tables10.csv")
 ```
 
 ```{r Create dichotomic outcome MoCA-INA, include=FALSE}
-data_batch2_moca_ina_mv_data2 <-
-  data_batch2_moca_ina_mv_data1 |>
+data_batch1_2_moca_ina_mv_data2 <-
+  data_batch1_2_moca_ina_mv_data1 |>
   select(id, interview_onset, batch) |>
   rownames_to_column(var = "seq") |>
   mutate_at("seq", as.numeric) |>
@@ -2193,16 +2424,16 @@ data_batch2_moca_ina_mv_data2 <-
   column_to_rownames(var = "seq") |>
   arrange(interview_onset) |>
   gather(batch, outcome, -id, -interview_onset) |>
-  filter(batch != levels(data_batch2_moca_ina_mv_data1$batch)[1]) |>
+  filter(batch != levels(data_batch1_2_moca_ina_mv_data1$batch)[1]) |>
   right_join(
-    select(data_batch2_moca_ina_mv_data1, -interview_onset, -batch)
+    select(data_batch1_2_moca_ina_mv_data1, -interview_onset, -batch)
     , by = join_by(id)
   )
 ```
 
 ```{r Kaplan-Meier MoCA-INA estimator and sample size per month, include=FALSE}
 figures7 <-
-  data_batch2_moca_ina_mv_data2 |>
+  data_batch1_2_moca_ina_mv_data2 |>
   mutate(batch = paste0(batch, " vs. others")) |>
   mutate_at("batch", str_remove_all, "CI ") |>
   rename_at("batch", \(x) "CI")
@@ -2232,7 +2463,7 @@ figures7 <-
           scale_x_continuous(
             "Month", breaks = seq(0, 48, 12), labels = \(x) x * 1
           ) +
-          scale_y_continuous("Event Rate", labels = \(x)x)
+          scale_y_continuous("Disease-free Survival Rate", labels = \(x)x)
         , ncol = 2
         , nrow = 1
         , widths = c(0, 10)
@@ -2248,6 +2479,15 @@ figures7 <-
       , heights = c(3, 2)
     )
   )
+
+data_batch1_2_moca_ina_mv_data2 |>
+  group_by(outcome, interview_onset) |>
+  summarize(n = n(), .groups = "drop") |>
+  pivot_wider(
+    names_prefix = "outcome"
+    , names_from = "outcome"
+    , values_from = "n", values_fill = 0
+  )
 ```
 
 ```{r figure-s7, echo=FALSE, fig.height=6, fig.width=15}
@@ -2261,8 +2501,22 @@ figures7
 ggsave("doc/figures7.eps", height = 6, width = 15)
 ```
 
+```{r Separate exposure for CI by severity, include=FALSE}
+data_batch1_2_moca_ina_mv_data3 <-
+  data_batch1_2_moca_ina_mv_data2 |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      ) |>
+      factor()
+  )
+```
+
 ```{r Finalize multivariate data MoCA-INA, include=FALSE}
-data_batch2_moca_ina_mv_data <- data_batch2_moca_ina_mv_data2
+data_batch1_2_moca_ina_mv_data <- data_batch1_2_moca_ina_mv_data3
 ```
 
 ## Statistical inference
@@ -2293,7 +2547,7 @@ unilr_results <-
   lapply(univar_lr) |>
   c(list(
       `CI positive` =
-        data_batch2_moca_ina_mv_data |>
+        data_batch1_2_moca_ina_mv_data |>
         select_at(c(non_indep, mea_err_var[-2])) |>
         univar_lr()
     )
@@ -2366,9 +2620,9 @@ unicox_results_sbq_lc <-
   lapply(univar_coxph)
 
 unicox_results_moca_ina <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate_at("outcome", as.factor) |>
       select(id, sbq_lc_class = outcome)
     , by = join_by(id)
@@ -2635,7 +2889,7 @@ ggsave("doc/figures9.eps", height = 7, width = 11)
 
 ```{r KM plot of CI positive per exposure, include=FALSE}
 figures10 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data2 |>
   mutate(
     exposure =
       case_when(exposure == 0 ~ "[2]", exposure == 1 ~ "[1]") |>
@@ -2643,9 +2897,9 @@ figures10 <-
   ) |>
   univar_surv_plot(
     "exposure"
-    , "Cognitive impairment"
-    , c(9.5, 13.5)
-    , c(0.075, 0.55)
+    , "PCCI"
+    , c(12.5, 13.5)
+    , c(0.1, 0.65)
     , c("[2] Mild COVID-19 in the past year"
         , paste0(
           "[1] Moderate-to-severe COVID-19 at any time\n"
@@ -2656,7 +2910,7 @@ figures10 <-
   )
 ```
 
-```{r figure-s10, echo=FALSE, fig.height=7, fig.width=11}
+```{r figure-s10, echo=FALSE, fig.height=7, fig.width=15}
 figures10
 ```
 
@@ -2664,12 +2918,12 @@ Figure S10. KM plot of CI positive per exposure
 
 ```{r Save figure-s10, eval=FALSE, include=FALSE}
 figures10
-ggsave("doc/figure10.eps", height = 7, width = 11)
+ggsave("doc/figure10.eps", height = 7, width = 15)
 ```
 
 ```{r KM plot of CI positive per vaccine, include=FALSE}
 figures11 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   mutate(
     vaccine=
       case_when(
@@ -2681,9 +2935,9 @@ figures11 <-
   ) |>
   univar_surv_plot(
     "vaccine"
-    , "Cognitive impairment"
-    , c(1.5, 12.3, 12.3)
-    , c(0.05, 0, 0.43)
+    , "PCCI"
+    , c(4.5, 13.3, 13.3)
+    , c(0.2, 0.1, 0.63)
     , c(paste0(
           "[3] Received the first dose\n"
           , "     of COVID-19 vaccine\n"
@@ -2703,7 +2957,7 @@ figures11 <-
   )
 ```
 
-```{r figure-s11, echo=FALSE, fig.height=7, fig.width=11}
+```{r figure-s11, echo=FALSE, fig.height=7, fig.width=15}
 figures11
 ```
 
@@ -2711,7 +2965,7 @@ Figure S11. KM plot of CI positive per vaccine
 
 ```{r Save figure-s11, eval=FALSE, include=FALSE}
 figures11
-ggsave("doc/figures11.eps", height = 7, width = 11)
+ggsave("doc/figures11.eps", height = 7, width = 15)
 ```
 
 ```{r Cluster characteristics based on SBQ-LC domain, include=FALSE}
@@ -2882,7 +3136,26 @@ interlr_results <-
     , `CI positive`=
         unicox_results_sum$`CI positive` |>
         filter(variable!="sbq_lc_class") |>
-        intervar_lr(data_batch2_moca_ina_mv_data)
+        intervar_lr(data_batch1_2_moca_ina_mv_data)
+    , `CI positive (exposure 1 vs. 0)`=
+        unicox_results_sum$`CI positive` |>
+        filter(variable!="sbq_lc_class") |>
+        intervar_lr(
+          data_batch1_2_moca_ina_mv_data |>
+            filter(exposure %in% c(0, 1)) |>
+            mutate_at("exposure", factor)
+        )
+    , `CI positive (exposure 2 vs. 0)`=
+        unicox_results_sum$`CI positive` |>
+        filter(variable!="sbq_lc_class") |>
+        intervar_lr(
+          data_batch1_2_moca_ina_mv_data |>
+            filter(exposure %in% c(0, 2)) |>
+            mutate_at(
+              "exposure"
+              , \(x) factor(ifelse(as.character(x) == 2, 1, as.character(x)))
+            )
+        )
   )
 ```
 
@@ -2952,7 +3225,14 @@ write_csv(tables16, "doc/tables16.csv")
 
 ```{r Covariates of CI positive, include=FALSE}
 tables17 <-
-  interlr_results_sum$`CI positive` |>
+  interlr_results_sum[
+    c("CI positive"
+      , "CI positive (exposure 1 vs. 0)"
+      , "CI positive (exposure 2 vs. 0)"
+    )
+  ] |>
+  imap(~ mutate(.x, comparison = .y)) |>
+  reduce(rbind) |>
   mutate(outcome = outcome_label, variable = label) |>
   select(-outcome_label, -label) |>
   unite(CI, LB, UB, sep = ", ") |>
@@ -3003,7 +3283,10 @@ multicox_variables$`Cluster 2+3 ~ exposure`$covariates <-
 multicox_variables$`Cluster 2+3 ~ exposure`$covariates <-
   multicox_variables$`Cluster 2+3 ~ exposure`$covariates[
     !multicox_variables$`Cluster 2+3 ~ exposure`$covariates
-     %in% c("vaccine", "other_sore_throat", "other_fever", "age_timestamp")
+     %in% c(
+       "vaccine", "other_loss_smell", "other_sore_throat", "other_fever"
+       , "age_timestamp"
+     )
   ]
 
 # Cluster 2+3 ~ vaccine
@@ -3023,7 +3306,8 @@ multicox_variables$`Cluster 2+3 ~ vaccine`$covariates <-
   ]
 
 # CI positive ~ exposure
-multicox_variables$`CI positive ~ exposure`$data <- data_batch2_moca_ina_mv_data
+multicox_variables$`CI positive ~ exposure`$data <-
+  data_batch1_2_moca_ina_mv_data
 multicox_variables$`CI positive ~ exposure`$causal_factor <- "exposure"
 multicox_variables$`CI positive ~ exposure`$covariates <-
   interlr_results_sum$`CI positive` |>
@@ -3034,11 +3318,12 @@ multicox_variables$`CI positive ~ exposure`$covariates <-
 multicox_variables$`CI positive ~ exposure`$covariates <-
   multicox_variables$`CI positive ~ exposure`$covariates[
     !multicox_variables$`CI positive ~ exposure`$covariates
-     %in% c("vaccine", "other_sore_throat", "age_timestamp")
+     %in% c("vaccine", "other_loss_smell", "other_sore_throat", "age_timestamp")
   ]
 
 # CI positive ~ vaccine
-multicox_variables$`CI positive ~ vaccine`$data <- data_batch2_moca_ina_mv_data
+multicox_variables$`CI positive ~ vaccine`$data <-
+  data_batch1_2_moca_ina_mv_data
 multicox_variables$`CI positive ~ vaccine`$causal_factor <- "vaccine"
 multicox_variables$`CI positive ~ vaccine`$covariates <-
   interlr_results_sum$`CI positive` |>
@@ -3049,14 +3334,16 @@ multicox_variables$`CI positive ~ vaccine`$covariates <-
 multicox_variables$`CI positive ~ vaccine`$covariates <-
   multicox_variables$`CI positive ~ vaccine`$covariates[
     !multicox_variables$`CI positive ~ vaccine`$covariates
-     %in% c("exposure")
+     %in% c(
+       "exposure", "other_loss_smell", "other_sore_throat", "age_timestamp"
+     )
   ]
 
 # CI positive ~ exposure + Cluster 2+3
 multicox_variables$`CI positive ~ exposure + Cluster 2+3`$data <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate_at("outcome", as.factor) |>
       select(id, sbq_lc_class = outcome)
     , by = join_by(id)
@@ -3065,6 +3352,45 @@ multicox_variables$`CI positive ~ exposure + Cluster 2+3`$causal_factor <-
   "exposure"
 multicox_variables$`CI positive ~ exposure + Cluster 2+3`$covariates <-
   c("sbq_lc_class", multicox_variables$`CI positive ~ exposure`$covariates)
+
+# CI positive ~ exposure (1 vs. 0)
+multicox_variables$`CI positive ~ exposure (1 vs. 0)`$data <-
+  data_batch1_2_moca_ina_mv_data |>
+  filter(exposure %in% c(0, 1)) |>
+  mutate_at("exposure", factor)
+multicox_variables$`CI positive ~ exposure (1 vs. 0)`$causal_factor <- "exposure"
+multicox_variables$`CI positive ~ exposure (1 vs. 0)`$covariates <-
+  interlr_results_sum$`CI positive (exposure 1 vs. 0)` |>
+  filter(outcome == "exposure") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`CI positive ~ exposure (1 vs. 0)`$covariates <-
+  multicox_variables$`CI positive ~ exposure (1 vs. 0)`$covariates[
+    !multicox_variables$`CI positive ~ exposure (1 vs. 0)`$covariates
+     %in% c("vaccine", "other_loss_smell", "other_sore_throat", "age_timestamp")
+  ]
+
+# CI positive ~ exposure (2 vs. 0)
+multicox_variables$`CI positive ~ exposure (2 vs. 0)`$data <-
+  data_batch1_2_moca_ina_mv_data |>
+  filter(exposure %in% c(0, 2)) |>
+  mutate_at(
+    "exposure"
+    , \(x) factor(ifelse(as.character(x) == 2, 1, as.character(x)))
+  )
+multicox_variables$`CI positive ~ exposure (2 vs. 0)`$causal_factor <- "exposure"
+multicox_variables$`CI positive ~ exposure (2 vs. 0)`$covariates <-
+  interlr_results_sum$`CI positive (exposure 2 vs. 0)` |>
+  filter(outcome == "exposure") |>
+  pull(variable) |>
+  unique()
+
+multicox_variables$`CI positive ~ exposure (2 vs. 0)`$covariates <-
+  multicox_variables$`CI positive ~ exposure (2 vs. 0)`$covariates[
+    !multicox_variables$`CI positive ~ exposure (2 vs. 0)`$covariates
+     %in% c("vaccine", "other_loss_smell", "other_sore_throat", "age_timestamp")
+  ]
 ```
 
 ```{r Conduct multivariate Cox-PH, include=FALSE}
@@ -3079,7 +3405,9 @@ multicox_results <-
           multicox_variables[[.y]]$covariates
         , unicox_result_df =
           unicox_results[[
-            str_remove_all(.y, " ~ exposure| ~ vaccine| \\+ Cluster 2\\+3")
+            str_remove_all(
+              .y, " ~ exposure| ~ vaccine| \\+ Cluster 2\\+3| \\(2 vs\\. 0\\)"
+            )
           ]]
       )
   )
@@ -3092,9 +3420,9 @@ multicox_results_sum <-
     \(x)
     x$results |>
       group_by(variable) |>
-      filter(!(LB == "0.000" & UB == "Inf")) |>
-      filter(sum(p_value != ">0.05") > 0) |>
-      filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+      # filter(!(LB == "0.000" & UB == "Inf")) |>
+      # filter(sum(p_value != ">0.05") > 0) |>
+      # filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
       left_join(
         variable_label_type |>
           mutate(
@@ -3120,6 +3448,32 @@ tables18 <-
             paste0(
               str_split_fixed(.y, " ~ ", 2)[, 1]
               , " (direct effect beyond SBQ-LC) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
+  c(multicox_results_sum[6] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause =
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (exposure 1 vs. 0) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
+  c(multicox_results_sum[7] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause =
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (exposure 2 vs. 0) ~ "
               , str_split_fixed(.y, " ~ ", 2)[, 2]
             )
         )
@@ -3161,7 +3515,56 @@ tables18 |>
 write_csv(tables18, "doc/tables18.csv")
 ```
 
-```{r Exposure as causal factor of cluster 2+3, include=FALSE}
+```{r Number and proportion of independent variable per outcome, include=FALSE}
+indep_outcome_n_p <-
+  rbind(
+    data_batch2_sbq_lc_desc2_ver_outcome |>
+      mutate(effect_cause = paste0("Cluster 2+3 ~ ", variable))
+    , data_batch1_2_moca_ina_desc2_ver_outcome |>
+      mutate(effect_cause = paste0("CI positive ~ ", variable))
+  ) |>
+  filter(variable %in% c("exposure", "vaccine")) |>
+  # filter(
+  #   category != paste0(
+  #     "Received the first dose of COVID-19 vaccine before COVID infection"
+  #   )
+  # ) |>
+  rbind(
+    data_batch1_2_moca_ina_desc2_ver_outcome |>
+      filter(variable %in% c("exposure")) |>
+      mutate(
+        effect_cause =
+          paste0(
+            "CI positive (direct effect beyond SBQ-LC) ~ "
+            , "exposure + Cluster 2+3"
+          )
+      )
+  ) |>
+  rbind(
+    data_batch1_2_moca_ina_desc2_ver_outcome |>
+      filter(variable %in% c("exposure")) |>
+      mutate(
+        effect_cause =
+          paste0(
+            "CI positive (exposure 1 vs. 0) ~ "
+            , "exposure (1 vs. 0)"
+          )
+      )
+  ) |>
+  rbind(
+    data_batch1_2_moca_ina_desc2_ver_outcome |>
+      filter(variable %in% c("exposure")) |>
+      mutate(
+        effect_cause =
+          paste0(
+            "CI positive (exposure 2 vs. 0) ~ "
+            , "exposure (2 vs. 0)"
+          )
+      )
+  )
+```
+
+```{r Exposure as causal factor of cluster 2+3 & CI, include=FALSE}
 tables19 <-
   multicox_results_sum[1:4] |>
   imap(~ mutate(.x, effect_cause = .y)) |>
@@ -3178,16 +3581,41 @@ tables19 <-
         )
     )
   ) |>
+  c(multicox_results_sum[6] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause =
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (exposure 1 vs. 0) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
+  c(multicox_results_sum[7] |>
+    imap(
+      ~ .x |>
+        mutate(
+          effect_cause =
+            paste0(
+              str_split_fixed(.y, " ~ ", 2)[, 1]
+              , " (exposure 2 vs. 0) ~ "
+              , str_split_fixed(.y, " ~ ", 2)[, 2]
+            )
+        )
+    )
+  ) |>
   reduce(rbind) |>
   ungroup() |>
   mutate(
     category =
       case_when(
         variable == "exposure" & term_reference == "1 vs. 0"
-        ~ paste0(
-            "Moderate-to-severe COVID-19 at any time or mild COVID-19 within "
-            , "the past year"
-          )
+        ~ "Mild COVID-19 within the past year"
+        , variable == "exposure" & term_reference == "2 vs. 0"
+          ~ "Moderate-to-severe COVID-19 at any time"
         , variable == "vaccine" & term_reference == "1 vs. 0"
           ~ "Received the first dose of COVID-19 vaccine after their COVID-19"
         , variable == "vaccine" & term_reference == "2 vs. 0"
@@ -3195,31 +3623,10 @@ tables19 <-
       )
   ) |>
   inner_join(
-    rbind(
-        data_batch2_sbq_lc_desc2_ver_outcome |>
-          mutate(effect_cause = paste0("Cluster 2+3 ~ ", variable))
-        , data_batch2_moca_ina_desc2_ver_outcome |>
-          mutate(effect_cause = paste0("CI positive ~ ", variable))
-      ) |>
-      filter(variable %in% c("exposure", "vaccine")) |>
-      # filter(
-      #   category != paste0(
-      #     "Received the first dose of COVID-19 vaccine before COVID infection"
-      #   )
-      # ) |>
-      rbind(
-        data_batch2_moca_ina_desc2_ver_outcome |>
-          filter(variable %in% c("exposure")) |>
-          mutate(
-            effect_cause =
-              paste0(
-                "CI positive (direct effect beyond SBQ-LC) ~ "
-                , "exposure + Cluster 2+3"
-              )
-          )
-      )
+    indep_outcome_n_p
     , by = join_by(variable, category, effect_cause)
   ) |>
+  
   select(effect_cause, type, variable, category, n, p, everything()) |>
   separate(effect_cause, c("outcome", "cause"), sep = " ~ ") |>
   select(-cause, -type, -p_value) |>
@@ -3260,7 +3667,15 @@ tables19 <-
       rbind(
         filter(., outcome == "CI positive") |>
           mutate(outcome = "CI positive (direct effect beyond SBQ-LC)")
-      ) |>
+      ) %>%
+      # rbind(
+      #   filter(., outcome == "CI positive") |>
+      #     mutate(outcome = "CI positive (exposure 1 vs. 0)")
+      # ) %>%
+      # rbind(
+      #   filter(., outcome == "CI positive") |>
+      #     mutate(outcome = "CI positive (exposure 2 vs. 0)")
+      # ) |>
       select(outcome, type, variable, everything()) |>
       select(-type, -p_value) |>
       mutate(variable = label) |>
@@ -3317,7 +3732,7 @@ tables19 <-
   `colnames<-`(
     colnames(tables19) |>
       str_to_sentence() |>
-      str_replace_all("N", "Num. (N=210)") |>
+      str_replace_all("N", "Num. (N=210; N=300)") |>
       str_replace_all("P", "% positive") |>
       str_replace_all("Hr crude", "HR crude (95% CI)") |>
       str_replace_all("Hr adj.", "HR adj. (95% CI)")
@@ -3342,64 +3757,17 @@ write_csv(tables19, "doc/tables19.csv")
 
 ```{r Process and extract data batch 1 & 2 for prevalence, include=FALSE}
 data_batch1_2_preval_data <-
-  data_batch1_2_preval_data1 |>
-  mutate(seq = seq(nrow(data_batch1_2_preval_data1))) |>
-  gather(colname, new_score, -seq)
-
-data_batch1_2_preval_data <-
-  data_batch1_2_preval_data |>
-  rbind(
-    group_by(data_batch1_2_preval_data, seq) |>
-      summarize(new_score = mean(is.na(new_score)) == 0) |>
-      mutate(colname = "complete") |>
-      select(colname, new_score, everything())
-  ) |>
-  mutate(colname = factor(colname, unique(colname))) |>
-  spread(colname, new_score) |>
-  arrange(seq) |>
-  filter(complete == 1) |>
-  select(-complete) |>
-  column_to_rownames(var = "seq") |>
-  as.matrix()
-
-data_batch1_2_preval_data <-
-  data_batch1_2_preval_data %*% data_batch1_pca$rotation[, "PC1", drop = FALSE]
-
-data_batch1_2_preval_data <-
-  as.data.frame(data_batch1_2_preval_data) |>
-  rownames_to_column(var = "seq") |>
-  mutate(seq = as.numeric(seq)) |>
-  rename(sbq_lc_total = PC1) |>
-  right_join(
-    data_batch1_2 |>
-      mutate(seq = seq(nrow(data_batch1_2))) |>
-      select(seq)
-    , by = join_by(seq)
-  ) |>
-  mutate(
-    sbq_lc_class =
-      case_when(
-        sbq_lc_total > pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 1"
-        ,sbq_lc_total <= pc1_cl_intersections$`Cluster 1-2` ~ "Cluster 2+3"
-      ) |>
-      factor(c("Cluster 1", "Cluster 2+3"))
-  ) |>
+  data_batch1_2_sbq_lc_mv_data2 |>
+  filter(batch == "Cluster 2+3") |>
+  mutate(outcome = factor(ifelse(outcome == 0, "Cluster 1", "Cluster 2+3"))) |>
+  select(id, sbq_lc_class = outcome) |>
   left_join(
-    data_batch1_2 |>
-      mutate(
-        moca_ina_class =
-          ifelse(
-            as.character(moca_ina_class) == "1", "CI positive", "CI negative"
-          ) |>
-          factor(c("CI negative", "CI positive"))
-      ) |>
-      select(id, moca_ina_total, moca_ina_class) |>
-      mutate(seq = seq(nrow(data_batch1_2)))
-    , by = join_by(seq)
-  ) |>
-  arrange(seq) |>
-  select(-seq) |>
-  select(id, everything())
+    data_batch1_2_moca_ina_mv_data2 |>
+      filter(batch == "CI positive") |>
+      mutate(outcome = factor(ifelse(outcome == 0, "CI negative", "CI positive"))) |>
+      select(id, moca_ina_class = outcome)
+    , by = join_by(id)
+  )
 ```
 
 ```{r Bootstrap to estimate interval estimate of prevalence, include=FALSE}
@@ -3409,7 +3777,7 @@ for(i in seq(1000)){
   set.seed(seed + i)
   
   preval_boot[[i]] <-
-    data_batch1_2_preval_data |>
+     data_batch1_2_preval_data |>
     slice(
       sample(
         seq(nrow(data_batch1_2_preval_data))
@@ -3418,13 +3786,24 @@ for(i in seq(1000)){
       )
     ) |>
     group_by(sbq_lc_class, moca_ina_class) |>
-    summarize(n = n(), .groups = "drop") |>
+    summarize(n = n(), .groups = "drop")
+  
+  preval_boot_temp <- list()
+  
+  preval_boot_temp$a <-
+    preval_boot[[i]] |>
+    group_by(sbq_lc_class) |>
+    mutate(total = sum(n)) |>
+    ungroup()
+  
+  preval_boot_temp$b <-
+    preval_boot[[i]] |>
     mutate(total = sum(n))
   
   preval_boot[[i]] <-
-    preval_boot[[i]] |>
+    preval_boot_temp$a |>
     rbind(
-      mutate(preval_boot[[i]], sbq_lc_class = "Cluster 1+2+3") |>
+      mutate(preval_boot_temp$b, sbq_lc_class = "Cluster 1+2+3") |>
         group_by(sbq_lc_class, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
@@ -3432,13 +3811,13 @@ for(i in seq(1000)){
   preval_boot[[i]] <-
     preval_boot[[i]] |>
     rbind(
-      mutate(preval_boot[[i]], moca_ina_class = "CI total") |>
+      mutate(preval_boot_temp$b, moca_ina_class = "CI total") |>
         group_by(sbq_lc_class, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
 }
 
-rm(i)
+rm(i, preval_boot_temp)
 ```
 
 ```{r Prevalence of LC and CI, include=FALSE}
@@ -3446,12 +3825,20 @@ tables20 <-
   data_batch1_2_preval_data |>
   group_by(sbq_lc_class, moca_ina_class) |>
   summarize(n=n(), .groups = "drop") |>
-  mutate(total = sum(n))
+  group_by(sbq_lc_class) |>
+  mutate(total = sum(n)) |>
+  ungroup()
+
+tables20b <-
+  data_batch1_2_preval_data |>
+  group_by(sbq_lc_class, moca_ina_class) |>
+  summarize(n=n(), .groups = "drop") |>
+  mutate(total = sum(n)) 
 
 tables20 <-
   tables20 |>
   rbind(
-    mutate(tables20, sbq_lc_class = "Cluster 1+2+3") |>
+    mutate(tables20b, sbq_lc_class = "Cluster 1+2+3") |>
       group_by(sbq_lc_class, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   )
@@ -3459,7 +3846,7 @@ tables20 <-
 tables20 <-
   tables20 |>
   rbind(
-    mutate(tables20, moca_ina_class = "CI total") |>
+    mutate(tables20b, moca_ina_class = "CI total") |>
       group_by(sbq_lc_class, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   ) |>
@@ -3531,13 +3918,24 @@ for(i in seq(1000)){
       )
     ) |>
     group_by(sbq_lc_class, moca_ina_class) |>
-    summarize(n = n(), .groups = "drop") |>
+    summarize(n = n(), .groups = "drop")
+  
+  preval_boot_temp <- list()
+  
+  preval_boot_temp$a <-
+    preval_boot_batch2[[i]] |>
+    group_by(sbq_lc_class) |>
+    mutate(total = sum(n)) |>
+    ungroup()
+  
+  preval_boot_temp$b <-
+    preval_boot_batch2[[i]] |>
     mutate(total = sum(n))
   
   preval_boot_batch2[[i]] <-
-    preval_boot_batch2[[i]] |>
+    preval_boot_temp$a |>
     rbind(
-      mutate(preval_boot_batch2[[i]], sbq_lc_class = "Cluster 1+2+3") |>
+      mutate(preval_boot_temp$b, sbq_lc_class = "Cluster 1+2+3") |>
         group_by(sbq_lc_class, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
@@ -3545,7 +3943,7 @@ for(i in seq(1000)){
   preval_boot_batch2[[i]] <-
     preval_boot_batch2[[i]] |>
     rbind(
-      mutate(preval_boot_batch2[[i]], moca_ina_class = "CI total") |>
+      mutate(preval_boot_temp$b, moca_ina_class = "CI total") |>
         group_by(sbq_lc_class, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
@@ -3560,12 +3958,21 @@ tables21 <-
   filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
   group_by(sbq_lc_class, moca_ina_class) |>
   summarize(n = n(), .groups = "drop") |>
+  group_by(sbq_lc_class) |>
+  mutate(total = sum(n)) |>
+  ungroup()
+
+tables21b <-
+  data_batch1_2_preval_data |>
+  filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
+  group_by(sbq_lc_class, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
   mutate(total = sum(n))
 
 tables21 <-
   tables21 |>
   rbind(
-    mutate(tables21, sbq_lc_class = "Cluster 1+2+3") |>
+    mutate(tables21b, sbq_lc_class = "Cluster 1+2+3") |>
       group_by(sbq_lc_class, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   )
@@ -3573,7 +3980,7 @@ tables21 <-
 tables21 <-
   tables21 |>
   rbind(
-    mutate(tables21, moca_ina_class = "CI total") |>
+    mutate(tables21b, moca_ina_class = "CI total") |>
       group_by(sbq_lc_class, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   ) |>
@@ -3628,22 +4035,32 @@ write_csv(tables21,"doc/tables21.csv")
 ```{r Add other primary variables, include=FALSE}
 data_batch1_2_preval_data_plus <-
   data_batch1_2_preval_data |>
-  filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
+  # filter(id %in% filter(data_batch1_2,batch == "Batch 2")$id) |>
   left_join(
-    data_batch2_moca_ina_mv_data |>
+    data_batch1_2_moca_ina_mv_data |>
       select(id, exposure, vaccine)
     , by = join_by(id)
   )
 ```
 
-```{r Bootstrap to estimate prevalence in batch 2 x infection, include=FALSE}
-preval_boot_batch2_infection <- list()
+```{r Bootstrap to estimate prevalence x infection, include=FALSE}
+preval_boot_batch1_2_infection <- list()
 
 for(i in seq(1000)){
   set.seed(seed + i)
   
-  preval_boot_batch2_infection[[i]] <-
+  preval_boot_batch1_2_infection[[i]] <-
     data_batch1_2_preval_data_plus |>
+    mutate(exposure = as.numeric(as.character(exposure))) |>
+    mutate(
+      exposure =
+        case_when(
+          exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+          , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+          , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+        ) |>
+        factor()
+    ) |>
     slice(
       sample(
         seq(nrow(data_batch1_2_preval_data_plus))
@@ -3652,32 +4069,71 @@ for(i in seq(1000)){
       )
     ) |>
     group_by(exposure, moca_ina_class) |>
-    summarize(n = n(), .groups = "drop") |>
+    summarize(n = n(), .groups = "drop")
+  
+  preval_boot_temp <- list()
+  
+  preval_boot_temp$a <-
+    preval_boot_batch1_2_infection[[i]] |>
+    group_by(exposure) |>
+    mutate(total = sum(n)) |>
+    ungroup()
+  
+  preval_boot_temp$b <-
+    preval_boot_batch1_2_infection[[i]] |>
     mutate(total = sum(n))
   
-  preval_boot_batch2_infection[[i]] <-
-    preval_boot_batch2_infection[[i]] |>
+  preval_boot_batch1_2_infection[[i]] <-
+    preval_boot_temp$a |>
     rbind(
-      mutate(preval_boot_batch2_infection[[i]], exposure = "All") |>
+      mutate(preval_boot_temp$b, exposure = "All") |>
         group_by(exposure, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
   
-  preval_boot_batch2_infection[[i]] <-
-    preval_boot_batch2_infection[[i]] |>
+  preval_boot_batch1_2_infection[[i]] <-
+    preval_boot_batch1_2_infection[[i]] |>
     rbind(
-      mutate(preval_boot_batch2_infection[[i]], moca_ina_class = "CI total") |>
+      mutate(preval_boot_temp$b, moca_ina_class = "CI total") |>
         group_by(exposure, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
 }
 
-rm(i)
+rm(i, preval_boot_temp)
 ```
 
-```{r Prevalence of infection and CI in batch 2, include=FALSE}
+```{r Prevalence of infection and CI, include=FALSE}
 tables22 <-
   data_batch1_2_preval_data_plus |>
+  mutate(exposure = as.numeric(as.character(exposure))) |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      ) |>
+      factor()
+  ) |>
+  group_by(exposure, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(exposure) |>
+  mutate(total = sum(n)) |>
+  ungroup()
+
+tables22b <-
+  data_batch1_2_preval_data_plus |>
+  mutate(exposure = as.numeric(as.character(exposure))) |>
+  mutate(
+    exposure =
+      case_when(
+        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+      ) |>
+      factor()
+  ) |>
   group_by(exposure, moca_ina_class) |>
   summarize(n = n(), .groups = "drop") |>
   mutate(total = sum(n))
@@ -3685,7 +4141,7 @@ tables22 <-
 tables22 <-
   tables22 |>
   rbind(
-    mutate(tables22, exposure = "All") |>
+    mutate(tables22b, exposure = "All") |>
       group_by(exposure, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   )
@@ -3693,13 +4149,13 @@ tables22 <-
 tables22 <-
   tables22 |>
   rbind(
-    mutate(tables22, moca_ina_class = "CI total") |>
+    mutate(tables22b, moca_ina_class = "CI total") |>
       group_by(exposure, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   ) |>
   mutate(p = n / total) |>
   left_join(
-    preval_boot_batch2_infection |>
+    preval_boot_batch1_2_infection |>
       reduce(rbind) |>
       mutate(p = n / total) |>
       group_by(exposure, moca_ina_class) |>
@@ -3735,7 +4191,7 @@ tables22 <-
 tables22 |>
   kable(
     format = "html"
-    , caption = "Table S22. Prevalence of infection and CI in batch 2"
+    , caption = "Table S22. Prevalence of infection and CI"
   ) |>
   kable_classic() |>
   kable_styling(position="float_left")
@@ -3745,13 +4201,13 @@ tables22 |>
 write_csv(tables22, "doc/tables22.csv")
 ```
 
-```{r Bootstrap to estimate prevalence in batch 2 x vaccine, include=FALSE}
-preval_boot_batch2_vaccine <- list()
+```{r Bootstrap to estimate prevalence x vaccine, include=FALSE}
+preval_boot_batch1_2_vaccine <- list()
 
 for(i in seq(1000)){
   set.seed(seed + i)
   
-  preval_boot_batch2_vaccine[[i]] <-
+  preval_boot_batch1_2_vaccine[[i]] <-
     data_batch1_2_preval_data_plus |>
     slice(
       sample(
@@ -3764,28 +4220,48 @@ for(i in seq(1000)){
     summarize(n = n(), .groups = "drop") |>
     mutate(total = sum(n))
   
-  preval_boot_batch2_vaccine[[i]] <-
-    preval_boot_batch2_vaccine[[i]] |>
+  preval_boot_temp <- list()
+  
+  preval_boot_temp$a <-
+    preval_boot_batch1_2_vaccine[[i]] |>
+    group_by(vaccine) |>
+    mutate(total = sum(n)) |>
+    ungroup()
+  
+  preval_boot_temp$b <-
+    preval_boot_batch1_2_vaccine[[i]] |>
+    mutate(total = sum(n))
+  
+  preval_boot_batch1_2_vaccine[[i]] <-
+    preval_boot_temp$a |>
     rbind(
-      mutate(preval_boot_batch2_vaccine[[i]], vaccine = "All") |>
+      mutate(preval_boot_temp$b, vaccine = "All") |>
         group_by(vaccine, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
   
-  preval_boot_batch2_vaccine[[i]] <-
-    preval_boot_batch2_vaccine[[i]] |>
+  preval_boot_batch1_2_vaccine[[i]] <-
+    preval_boot_batch1_2_vaccine[[i]] |>
     rbind(
-      mutate(preval_boot_batch2_vaccine[[i]], moca_ina_class = "CI total") |>
+      mutate(preval_boot_temp$b, moca_ina_class = "CI total") |>
         group_by(vaccine, moca_ina_class, total) |>
         summarize(n = sum(n), .groups = "drop")
     )
 }
 
-rm(i)
+rm(i, preval_boot_temp)
 ```
 
-```{r Prevalence of vaccine and CI in batch 2, include=FALSE}
+```{r Prevalence of vaccine and CI, include=FALSE}
 tables23 <-
+  data_batch1_2_preval_data_plus |>
+  group_by(vaccine, moca_ina_class) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(vaccine) |>
+  mutate(total = sum(n)) |>
+  ungroup()
+
+tables23b <-
   data_batch1_2_preval_data_plus |>
   group_by(vaccine, moca_ina_class) |>
   summarize(n = n(), .groups = "drop") |>
@@ -3794,7 +4270,7 @@ tables23 <-
 tables23 <-
   tables23 |>
   rbind(
-    mutate(tables23, vaccine = "All") |>
+    mutate(tables23b, vaccine = "All") |>
       group_by(vaccine, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   )
@@ -3802,13 +4278,13 @@ tables23 <-
 tables23 <-
   tables23 |>
   rbind(
-    mutate(tables23, moca_ina_class = "CI total") |>
+    mutate(tables23b, moca_ina_class = "CI total") |>
       group_by(vaccine, moca_ina_class, total) |>
       summarize(n = sum(n), .groups = "drop")
   ) |>
   mutate(p = n / total) |>
   left_join(
-    preval_boot_batch2_vaccine |>
+    preval_boot_batch1_2_vaccine |>
       reduce(rbind) |>
       mutate(p = n / total) |>
       group_by(vaccine, moca_ina_class) |>
@@ -3844,7 +4320,7 @@ tables23 <-
 tables23 |>
   kable(
     format = "html"
-    , caption = "Table S23. Prevalence of vaccine and CI in batch 2"
+    , caption = "Table S23. Prevalence of vaccine and CI"
   ) |>
   kable_classic() |>
   kable_styling(position="float_left")
@@ -4104,9 +4580,9 @@ ggsave("doc/figures14.eps", height = 7, width = 11)
 
 ```{r Conduct univariate Cox-PH of CI x exposure among mild, include=FALSE}
 tables27 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data2 |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate_at("outcome", as.factor) |>
       select(id, sbq_lc_class = outcome)
     , by = join_by(id)
@@ -4185,9 +4661,9 @@ write_csv(tables27, "doc/tables27.csv")
 
 ```{r Conduct univariate Cox-PH of CI x modsev vs control, include=FALSE}
 tables28 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data2 |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate_at("outcome", as.factor) |>
       select(id, sbq_lc_class = outcome)
     , by = join_by(id)
@@ -4272,9 +4748,9 @@ write_csv(tables28, "doc/tables28.csv")
 
 ```{r Conduct univariate Cox-PH of CI x ms vs m among exp 1, include=FALSE}
 tables29 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate_at("outcome", as.factor) |>
       select(id, sbq_lc_class = outcome)
     , by = join_by(id)
@@ -4359,15 +4835,15 @@ write_csv(tables29, "doc/tables29.csv")
 
 ```{r KM plot of CI per exposure separated severity, include=FALSE}
 figures15 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   mutate(
+    # exposure =
+    #   case_when(
+    #     exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
+    #     , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
+    #     , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
+    #   )
     exposure =
-      case_when(
-        exposure == 0 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 0
-        , exposure == 1 & id %in% filter(data_batch1_2, severity == "Mild")$id ~ 1
-        , exposure == 1 & id %in% filter(data_batch1_2, severity != "Mild")$id ~ 2
-      )
-    , exposure =
       case_when(
         exposure == 0 ~ "[3]", exposure == 1 ~ "[1]", exposure == 2 ~ "[2]"
       ) |>
@@ -4375,9 +4851,9 @@ figures15 <-
   ) |>
   univar_surv_plot(
     "exposure"
-    , "Cognitive impairment"
-    , c(12.4, 12.4, 12.4)
-    , c(0, 0.3, 0.85)
+    , "PCCI"
+    , c(13.4, 13.4, 13.4)
+    , c(0.05, 0.4, 0.85)
     , c(paste0(
           "[3] Mild COVID-19 in\n"
           , "     the past year"
@@ -4395,7 +4871,7 @@ figures15 <-
   )
 ```
 
-```{r figure-s15, echo=FALSE, fig.height=7, fig.width=11}
+```{r figure-s15, echo=FALSE, fig.height=7, fig.width=15}
 figures15
 ```
 
@@ -4403,12 +4879,12 @@ Figure S15. KM plot of CI per exposure separated severity
 
 ```{r Save figure-s15, eval=FALSE, include=FALSE}
 figures15
-ggsave("doc/figures15.eps", height = 7, width = 11)
+ggsave("doc/figures15.eps", height = 7, width = 15)
 ```
 
 ```{r Age-CI linearity, include=FALSE}
 figures16 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   mutate_at(
     c("age_timestamp", "age_inf_date")
     , \(x)
@@ -4468,10 +4944,10 @@ ggsave("doc/figures16.eps", height = 5, width = 7, units = "in")
 
 ```{r Summary of CI and LC, include=FALSE}
 tables30 <-
-  data_batch2_moca_ina_mv_data |>
+  data_batch1_2_moca_ina_mv_data |>
   select(id, ci = outcome) |>
   left_join(
-    data_batch2_sbq_lc_mv_data$`Cluster 2+3` |>
+    data_batch1_2_sbq_lc_mv_data$`Cluster 2+3` |>
       mutate(outcome = as.integer(outcome == 0)) |>
       select(id, lc = outcome)
     , by = join_by(id)
@@ -4499,6 +4975,16 @@ tables30 |>
 write_csv(tables30, "doc/tables30.csv")
 ```
 
+```{r table-31, echo=FALSE}
+indep_outcome_n_p |>
+  kable(
+    format = "html"
+    , caption =
+      "Table S31. Independent variable per outcome"
+  ) |>
+  kable_classic() |>
+  kable_styling(position="float_left")
+```
 
 
 
