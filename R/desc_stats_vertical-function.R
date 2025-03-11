@@ -3,20 +3,15 @@ desc_stats_vertical <- function(data, p_row = FALSE){
     data |>
     mutate(
       exposure =
-        ifelse(
-          exposure == 1
-          , paste0(
-              "Moderate-to-severe COVID-19 at any time or mild COVID-19 "
-              , "within the past year"
-            )
-          , "Mild COVID-19 in the past year"
+        case_when(
+          exposure == 0 ~ "Mild COVID-19 in the past year"
+          , exposure == 1 ~ "Mild COVID-19 within the past year"
+          , exposure == 2 ~ "Moderate-to-severe COVID-19 at any time"
         ) |>
         factor(
           c("Mild COVID-19 in the past year"
-            , paste0(
-                "Moderate-to-severe COVID-19 at any time or mild COVID-19 "
-                , "within the past year"
-              )
+            , "Mild COVID-19 within the past year"
+            , "Moderate-to-severe COVID-19 at any time"
           )
         )
       ,vaccine =
