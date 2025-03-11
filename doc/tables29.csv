@@ -1,2 +1,2 @@
 Outcome,Type,Variable,,HR (95% CI),p-value
-CI positive,Independent variable,COVID-19,,"0.799 (0.203, 3.148)",>0.05
+CI positive,Independent variable,COVID-19,,"0.330 (0.137, 0.793)",0.012

@@ -1,21 +1,33 @@
 Type,Outcome,Variable,,OR (95% CI),p-value
-Independent variable,COVID-19,COVID-19 vaccination,1 vs. 0,"0.051 (0.011, 0.240)",<0.001
-Independent variable,COVID-19,COVID-19 vaccination,2 vs. 0,"0.060 (0.018, 0.199)",<0.001
-Independent variable,COVID-19 vaccination,COVID-19,1 vs. 0,"0.059 (0.018, 0.193)",<0.001
-Memory-dependent covariate,COVID-19,Age at COVID-19 diagnosis (year),,"1.051 (1.026, 1.076)",<0.001
-Memory-dependent covariate,COVID-19,Cigarette smoking duration,,"1.040 (1.006, 1.074)",0.020
-Memory-dependent covariate,COVID-19,Cardiovascular diseases at COVID-19 diagnosis,1 vs. 0,"3.923 (1.616, 9.522)",0.003
-Memory-dependent covariate,COVID-19,Sore throat at COVID-19 diagnosis,1 vs. 0,"0.363 (0.159, 0.831)",0.017
-Memory-independent covariate,COVID-19,Age at data collection (year),,"1.047 (1.023, 1.072)",<0.001
-Memory-independent covariate,COVID-19,Educational status,Primary/Junior High School vs. College,"3.818 (1.572, 9.273)",0.003
-Memory-independent covariate,COVID-19,Educational status,Never school vs. College,"19.091 (2.034, 179.144)",0.010
-Memory-independent covariate,COVID-19,Marital status,Divorced vs. Unmarried,"9.000 (1.189, 68.133)",0.033
-Memory-independent covariate,COVID-19,Occupational status,Public servant vs. Unemployed,"0.245 (0.091, 0.657)",0.005
-Memory-independent covariate,COVID-19,Occupational status,White-collar employee vs. Unemployed,"0.130 (0.040, 0.421)",<0.001
-Memory-independent covariate,COVID-19,Occupational status,Other occupation vs. Unemployed,"0.168 (0.045, 0.634)",0.008
-Memory-independent covariate,COVID-19,MoCA-INA interviewer,5 vs. 1,"12.667 (1.289, 124.508)",0.029
-Memory-independent covariate,COVID-19,MoCA-INA interviewer,6 vs. 1,"6.635 (1.838, 23.950)",0.004
-Memory-independent covariate,COVID-19 vaccination,Educational status,Primary/Junior High School vs. College,"0.143 (0.040, 0.513)",0.003
-Memory-independent covariate,COVID-19 vaccination,Educational status,Never school vs. College,"0.061 (0.008, 0.454)",0.006
-Memory-independent covariate,COVID-19 vaccination,Occupational status,Public servant vs. Unemployed,"12.105 (1.482, 98.858)",0.020
-Memory-independent covariate,COVID-19 vaccination,MoCA-INA interviewer,5 vs. 1,"0.017 (0.001, 0.247)",0.003
+Independent variable,COVID-19,COVID-19 vaccination,1 vs. 0,"0.094 (0.031, 0.284)",<0.001
+Independent variable,COVID-19,COVID-19 vaccination,2 vs. 0,"0.115 (0.053, 0.249)",<0.001
+Independent variable,COVID-19 vaccination,COVID-19,1 vs. 0,"0.113 (0.052, 0.242)",<0.001
+Memory-dependent covariate,COVID-19,Age at COVID-19 diagnosis (year),,"1.030 (1.014, 1.047)",<0.001
+Memory-dependent covariate,COVID-19,Length of stay,,"1.426 (1.307, 1.555)",<0.001
+Memory-dependent covariate,COVID-19,Cardiovascular diseases at COVID-19 diagnosis,1 vs. 0,"2.123 (1.023, 4.409)",0.043
+Memory-dependent covariate,COVID-19,Other comorbidities at COVID-19 diagnosis,1 vs. 0,"3.029 (1.705, 5.380)",<0.001
+Memory-dependent covariate,COVID-19,Loss of smell at COVID-19 diagnosis,1 vs. 0,"0.301 (0.174, 0.521)",<0.001
+Memory-dependent covariate,COVID-19,Sore throat at COVID-19 diagnosis,1 vs. 0,"0.494 (0.279, 0.875)",0.016
+Memory-dependent covariate,COVID-19 vaccination,Age at COVID-19 diagnosis (year),,"0.967 (0.946, 0.988)",0.002
+Memory-dependent covariate,COVID-19 vaccination,Length of stay,,"0.840 (0.789, 0.894)",<0.001
+Memory-dependent covariate,COVID-19 vaccination,Other comorbidities at COVID-19 diagnosis,1 vs. 0,"0.439 (0.214, 0.899)",0.024
+Memory-dependent covariate,COVID-19 vaccination,Loss of smell at COVID-19 diagnosis,1 vs. 0,"3.193 (1.420, 7.180)",0.005
+Memory-dependent covariate,COVID-19 vaccination,Sore throat at COVID-19 diagnosis,1 vs. 0,"2.751 (1.113, 6.797)",0.028
+Memory-independent covariate,COVID-19,Age at data collection (year),,"1.028 (1.011, 1.044)",<0.001
+Memory-independent covariate,COVID-19,Educational status,Primary/Junior High School vs. College,"3.225 (1.609, 6.465)",<0.001
+Memory-independent covariate,COVID-19,Educational status,Never school vs. College,"17.591 (2.060, 150.184)",0.009
+Memory-independent covariate,COVID-19,Marital status,Married vs. Unmarried,"2.600 (1.042, 6.487)",0.041
+Memory-independent covariate,COVID-19,Marital status,Widowed vs. Unmarried,"4.133 (1.154, 14.809)",0.029
+Memory-independent covariate,COVID-19,Marital status,Divorced vs. Unmarried,"10.333 (1.531, 69.730)",0.017
+Memory-independent covariate,COVID-19,Occupational status,Public servant vs. Unemployed,"0.194 (0.091, 0.416)",<0.001
+Memory-independent covariate,COVID-19,Occupational status,White-collar employee vs. Unemployed,"0.222 (0.107, 0.462)",<0.001
+Memory-independent covariate,COVID-19,Occupational status,Self-employee vs. Unemployed,"0.397 (0.176, 0.893)",0.025
+Memory-independent covariate,COVID-19,Occupational status,Other occupation vs. Unemployed,"0.286 (0.120, 0.683)",0.005
+Memory-independent covariate,COVID-19 vaccination,Age at data collection (year),,"0.968 (0.947, 0.989)",0.003
+Memory-independent covariate,COVID-19 vaccination,Educational status,Senior High School vs. College,"0.310 (0.134, 0.720)",0.006
+Memory-independent covariate,COVID-19 vaccination,Educational status,Primary/Junior High School vs. College,"0.170 (0.069, 0.420)",<0.001
+Memory-independent covariate,COVID-19 vaccination,Educational status,Never school vs. College,"0.051 (0.010, 0.256)",<0.001
+Memory-independent covariate,COVID-19 vaccination,Marital status,Divorced vs. Unmarried,"0.121 (0.018, 0.816)",0.030
+Memory-independent covariate,COVID-19 vaccination,Occupational status,Public servant vs. Unemployed,"12.924 (2.930, 57.005)",<0.001
+Memory-independent covariate,COVID-19 vaccination,Occupational status,White-collar employee vs. Unemployed,"13.559 (3.077, 59.749)",<0.001
+Memory-independent covariate,COVID-19 vaccination,Occupational status,Other occupation vs. Unemployed,"14.407 (1.868, 111.112)",0.010
