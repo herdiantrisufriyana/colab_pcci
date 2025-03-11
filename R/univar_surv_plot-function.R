@@ -8,6 +8,8 @@ univar_surv_plot=
     , anno_y = 0
     , anno_label = ""
     , modified_data = TRUE
+    , xmin
+    , xmax
   ){
     data <-
       data |>
@@ -46,27 +48,72 @@ univar_surv_plot=
     
     suppressMessages(
       ggarrange(
-        data$plot +
+        data$plot$data |>
+          group_by(strata) |>
+          slice(-1) |>
+          ungroup() |>
+          rbind(
+            data$plot$data |>
+              group_by(strata) |>
+              slice(2) |>
+              ungroup() |>
+              select(-time) |>
+              left_join(
+                data$plot$data |>
+                  group_by(strata) |>
+                  slice(1) |>
+                  ungroup() |>
+                  select(time, strata)
+              )
+          ) |>
+          ggplot(aes(time, surv, color = strata)) +
+          geom_step(linewidth = 1) +
           annotate(
             geom = "text"
             , x = anno_x
             , y = anno_y
             , label = anno_label
-            , size = 5
+            , size = 4
             , hjust = 0
             , vjust = 0
           ) +
-          xlab("Month") +
+          scale_x_continuous(
+            "Month"
+            , breaks =
+              seq(min(data$plot$data$time), max(data$plot$data$time), 1)
+          ) +
           scale_y_continuous(paste0(outcome,"\nevent rate"), labels = \(x) x) +
           scale_color_discrete(
             filter(variable_label_type, variable == strata)$label
+          ) +
+          theme_classic() +
+          theme(
+            axis.title.y.left = element_text(size = 14)
+            , axis.text = element_text(size = 12)
+            , legend.position = "top"
           )
-        , data$table +
+        , data$table$data |>
+          filter(
+            time >= min(data$plot$data$time)
+            & time <= max(data$plot$data$time)
+          ) |>
+          mutate_at("strata", \(x) factor(x, rev(unique(x)))) |>
+          ggplot(aes(time, strata)) +
+          geom_text(aes(label = n.risk), size = 4) +
           ggtitle("Sample size") +
-          xlab("Month") +
+          scale_x_continuous(
+            "Month"
+            , breaks =
+              seq(min(data$plot$data$time), max(data$plot$data$time), 1)
+          ) +
           ylab(
             filter(variable_label_type, variable == strata)$label |>
               str_replace_all("COVID-19", "COVID-19\n")
+          ) +
+          theme_classic() +
+          theme(
+            axis.title.y.left = element_text(size = 14)
+            , axis.text = element_text(size = 12)
           )
         , ncol = 1
         , nrow = 2
