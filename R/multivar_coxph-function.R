@@ -20,9 +20,9 @@ multivar_coxph <-
           unicox_result_df |>
           filter(variable %in% covariates) |>
           filter(str_detect(term_reference, "vs\\.")) |>
-          filter(!(LB == "0.000" & UB == "Inf")) |>
-          filter(sum(p_value != ">0.05") > 0) |>
-          filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
+          # filter(!(LB == "0.000" & UB == "Inf")) |>
+          # filter(sum(p_value != ">0.05") > 0) |>
+          # filter(as.numeric(LB) > 1 | as.numeric(UB) < 1) |>
           separate(term_reference, c("term", "reference"), sep = " vs\\.") |>
           unite(variable, variable, term, sep = "=") |>
           pull(variable)
